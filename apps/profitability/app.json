@@ -1,8 +1,21 @@
 {
   "title": "SP Job Margin Board",
   "files": [
-    { "source": "sp", "path": "config.js" },
-    { "source": "repo", "path": "src/Code.js" },
-    { "source": "sp", "path": "Index.html" }
+    {
+      "source": "generated",
+      "path": "assumptions.js"
+    },
+    {
+      "source": "repo",
+      "path": "src/Config.js"
+    },
+    {
+      "source": "repo",
+      "path": "src/Code.js"
+    },
+    {
+      "source": "sp",
+      "path": "Index.html"
+    }
   ]
 }

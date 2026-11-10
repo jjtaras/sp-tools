@@ -1,8 +1,21 @@
 {
   "title": "SP Production Tracker",
   "files": [
-    { "source": "sp", "path": "Settings.js" },
-    { "source": "repo", "path": "src/Code.js" },
-    { "source": "sp", "path": "Index.html" }
+    {
+      "source": "generated",
+      "path": "assumptions.js"
+    },
+    {
+      "source": "repo",
+      "path": "src/Settings.js"
+    },
+    {
+      "source": "repo",
+      "path": "src/Code.js"
+    },
+    {
+      "source": "sp",
+      "path": "Index.html"
+    }
   ]
 }
