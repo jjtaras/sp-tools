@@ -27,6 +27,9 @@ assumptions:
   labor.rate_drafting:      { type: number, unit: "$/hr", used_by: [margin-board, production-tracker], description: "Burdened rate for drafting hours" }
   labor.rate_other:         { type: number, unit: "$/hr", used_by: [margin-board, production-tracker], description: "Burdened rate for everyone else" }
   labor.overhead_items:     { type: list<string>, used_by: [margin-board], description: "Innergy labor items that are overhead, never job cost, even when booked to a job" }
+  labor.drafting_department_prefix: { type: string, used_by: [margin-board], description: "Hours by people whose Innergy department starts with this are drafting" }
+  labor.drafting_type_prefix:       { type: string, used_by: [margin-board], description: "Labor items whose Innergy Type starts with this are drafting" }
+  labor.drafting_items:             { type: list<string>, used_by: [margin-board], description: "Other labor items that are drafting" }
 
   # ---- shop capacity and the shop-hours predictor (Production Tracker)
   shop.material_reserve_share:     { type: share,  used_by: [production-tracker], description: "Materials reserve; the value rule takes off the greater of this share or POs on the WO" }

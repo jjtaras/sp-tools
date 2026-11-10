@@ -15,7 +15,7 @@ var CONFIG = (function (A) {
     FULLY_BILLED_TOLERANCE: A.billing.fully_billed_tolerance,
     RECENT_DAYS: A.board.recent_days,                 // "still logging hours" window for fully billed jobs
     TIMESHEETS_START: A.innergy.timesheets_start,     // first month of timesheets in Innergy
-    OVERHEAD_LABOR_ITEMS: A.labor.overhead_items,     // overhead, never job cost, even when booked to a job
+    LABOR: A.labor,                                   // shared labor rules: overhead items, what counts as drafting
     NOT_JOBS: A.innergy.not_jobs,                     // Innergy projects that aren't real jobs
     LOOKBACK_EXCLUDE: A.lookback.exclude,
     LOOKBACK_MIN_CONTRACT: A.lookback.min_contract,

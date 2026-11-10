@@ -271,9 +271,7 @@ function buildBoard(raw, asOf) {
     d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
     return d.toISOString().slice(0, 10);
   };
-  var overhead = {}; C.OVERHEAD_LABOR_ITEMS.forEach(function (n) { overhead[n] = true; });
-  var draftItems = {Engineering: true};
-  raw.labors.forEach(function (l) { if (String(l.Type || '').indexOf('Drafting') === 0) draftItems[l.Name] = true; });
+  var rules = SPCore.laborRules(raw.labors, C.LABOR);
 
   // Per-project accumulators, keyed by project name (how timesheets and POs refer to projects).
   var acc = {};
@@ -285,8 +283,9 @@ function buildBoard(raw, asOf) {
     if (!t.ProjectName) return;
     var a = get(t.ProjectName), h = hours(t.ActivityDuration);
     if (t.ActivityStatus === 'Approved') a.approvedH += h;
-    if (overhead[t.LaborItemName]) { a.ohH += h; return; }
-    var isDraft = String(t.EmployeeDepartment || '').indexOf('3 -') === 0 || draftItems[t.LaborItemName];
+    var kind = SPCore.classifyLabor(t.LaborItemName, t.EmployeeDepartment, rules);
+    if (kind === 'overhead') { a.ohH += h; return; }
+    var isDraft = kind === 'drafting';
     if (isDraft) a.draftH += h; else a.shopH += h;
     if (t.ActivityStatus !== 'Approved') a.pendH += h;
     var dept = isDraft ? 'Drafting' : String(t.EmployeeDepartment || '?').split(' - ').pop().trim();

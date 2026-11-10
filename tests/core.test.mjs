@@ -29,3 +29,16 @@ test('labor rates and cost', () => {
   assert.equal(laborCost(2, 3, rates), 280);
   assert.equal(laborCost(0, 0, rates), 0);
 });
+
+test('labor rules: overhead wins, then drafting by department or item', async () => {
+  const { laborRules, classifyLabor } = await import('../core/index.mjs');
+  const rules = laborRules(
+    [{ Name: 'Detailing', Type: 'Draw Direct' }, { Name: 'Sanding', Type: 'Shop Direct' }],
+    { overhead_items: ['MEETINGS'], drafting_items: ['Engineering'], drafting_type_prefix: 'Draw', drafting_department_prefix: '9 -' });
+  assert.equal(classifyLabor('MEETINGS', '9 - Drawing', rules), 'overhead');
+  assert.equal(classifyLabor('Sanding', '9 - Drawing', rules), 'drafting');      // by department
+  assert.equal(classifyLabor('Detailing', '1 - Shop', rules), 'drafting');       // by item type
+  assert.equal(classifyLabor('Engineering', '1 - Shop', rules), 'drafting');     // listed item
+  assert.equal(classifyLabor('Sanding', '1 - Shop', rules), 'other');
+  assert.equal(classifyLabor(null, null, rules), 'other');
+});
