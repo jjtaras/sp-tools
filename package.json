@@ -1,0 +1,18 @@
+{
+  "name": "sp-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shop cost-model engine and the Apps Script dashboards that use it",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "test": "node --test tests/",
+    "fixture:record": "node scripts/record-fixture.mjs",
+    "fixture:freeze": "node scripts/freeze-fixture.mjs"
+  },
+  "devDependencies": {
+    "exceljs": "4.4.0"
+  }
+}
