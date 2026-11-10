@@ -162,7 +162,7 @@ function loadData_() {
 
 /* ------------------------------------------------------------------ rules (pure; no Google services) */
 var ACRONYMS = { PTAC: 1, CNC: 1, MDF: 1, AC: 1, TV: 1, HVAC: 1, POS: 1, MG: 1 };
-function hrs_(s) { return SPCore.durationHours(s, { wholeMinutes: true }); }
+function hrs_(s) { return SPCore.durationHours(s); }
 function val_(x) { return SPCore.amount(x); }
 function d10_(x) { return x ? String(x).slice(0, 10) : null; }
 function suffix_(n) { var p = n.split('-'); return p[p.length - 1]; }

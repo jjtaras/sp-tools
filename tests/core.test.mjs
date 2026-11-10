@@ -11,24 +11,15 @@ test('amount reads Innergy money objects', () => {
   assert.equal(amount(undefined), 0);
 });
 
-test('durationHours, default reading (counts seconds)', () => {
+test('durationHours reads to the whole minute (seconds dropped)', () => {
   assert.equal(durationHours('02:30:00'), 2.5);
-  assert.equal(durationHours('00:00:36'), 0.01);
+  assert.equal(durationHours('02:30:59'), 2.5);
+  assert.equal(durationHours('00:00:36'), 0);
   assert.equal(durationHours('1.02:00:00'), 26);
+  assert.equal(durationHours('02:30'), 2.5);
+  assert.equal(durationHours('n/a'), 0);
   assert.equal(durationHours(''), 0);
   assert.equal(durationHours(null), 0);
-  assert.ok(Number.isNaN(durationHours('02:30')));          // no seconds
-  assert.ok(Number.isNaN(durationHours('n/a')));
-});
-
-test('durationHours, wholeMinutes reading (ignores seconds)', () => {
-  const w = { wholeMinutes: true };
-  assert.equal(durationHours('02:30:00', w), 2.5);
-  assert.equal(durationHours('00:00:36', w), 0);
-  assert.equal(durationHours('1.02:00:00', w), 26);
-  assert.equal(durationHours('02:30', w), 2.5);
-  assert.equal(durationHours('n/a', w), 0);
-  assert.equal(durationHours('', w), 0);
 });
 
 test('labor rates and cost', () => {
