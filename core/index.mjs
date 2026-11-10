@@ -1,0 +1,4 @@
+// The shared engine. Pure functions only: no I/O, no Apps Script services, no SP values.
+// Bundled into each board as the global `SPCore` (see lib/core-bundle.mjs).
+export { amount, durationHours } from './innergy.mjs';
+export { laborRate, laborCost } from './labor.mjs';

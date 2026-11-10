@@ -1,0 +1,8 @@
+{
+  "title": "SP Production Tracker",
+  "files": [
+    { "source": "sp", "path": "Settings.js" },
+    { "source": "repo", "path": "src/Code.js" },
+    { "source": "sp", "path": "Index.html" }
+  ]
+}

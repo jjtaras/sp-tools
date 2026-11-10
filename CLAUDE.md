@@ -18,14 +18,21 @@ Goal: one versioned set of shop cost assumptions that every app reads, so changi
 
 ```
 model/schema.yaml        # what an assumption looks like (value, since, source, replaces)
-core/                    # pure functions, no I/O
-adapters/innergy/        # Innergy API client
-adapters/billing-sheet/  # SP Billing Dashboard (Google Sheet) reader
-apps/profitability/      # Apps Script project, own CHANGELOG.md
-apps/shop-schedule/      # Apps Script project, own CHANGELOG.md
-tests/                   # fixture tests; fixtures load from the SP config location
+core/                    # pure functions, no I/O; bundled into each board as global SPCore
+adapters/innergy/        # Innergy API client (Node; used to record fixtures)
+adapters/billing-sheet/  # SP Billing Dashboard reader (.xlsx download → getValues()-style grids)
+apps/profitability/      # Margin Board: src/Code.js, app.json (file list), appsscript.json, CHANGELOG.md
+apps/shop-schedule/      # Production Tracker: same shape
+lib/                     # env/.env loading, app assembly, core bundling
+scripts/                 # build, record-fixture, freeze-fixture
+tests/                   # core unit tests + fixture tests; fixtures load from the SP config location
+dist/                    # build output (gitignored)
 CHANGELOG.md             # engine changes
 ```
+
+Each board is assembled from `core/`, `apps/<app>/src/`, and SP's files in `sp-tools-config/apps/<app>/` (settings and, until step 3, the page). `npm test` runs that same assembly, so what's tested is what deploys.
+
+Commands: `npm test` · `npm run build` · `npm run fixture:record` then `npm run fixture:freeze -- <name>`.
 
 ## Rules
 
@@ -50,7 +57,7 @@ Jeffrey works on this from the Mac (home) and the Windows 11 PC (work). GitHub i
 
 0. ~~Set up the repo: `git init`, `.gitignore`, `.gitattributes`, `.nvmrc`, then the first commit and push to GitHub.~~ Done 2026-11-10 (remote uses HTTPS).
 1. ~~`clasp clone` both existing Apps Script projects, baseline with no changes.~~ Done 2026-11-10, **but the baseline went to `sp-tools-config/baseline/` on Drive, not into `apps/`.** Both projects hardcode SP values (rates, job numbers, WO values, Billing Sheet ID, client names), so committing them as-is would break the ownership split. App code enters `apps/` only once those values are split out. See the SP config CHANGELOG for file hashes.
-2. Pull the duplicated logic out of both into `core/`, without changing any outputs. Fixtures prove it.
+2. ~~Pull the duplicated logic out of both into `core/`, without changing any outputs.~~ Done 2026-11-10. Fixture harness built and verified against the live Margin Board; both boards' server code in `apps/`, SP values in `sp-tools-config/apps/`; shared Innergy-amount, duration and labor-cost math in `core/`. The two boards still count labor differently (timesheets vs WO job costing, different drafting/overhead rules); unifying that is a step 3 decision.
 3. Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml` (seed values below). Fixtures must still pass. (`sp-tools-config/` itself was created 2026-11-10.)
 4. Set up the build plus deploy script, and redeploy both boards from the repo.
 

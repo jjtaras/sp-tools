@@ -1,14 +1,16 @@
 // Fixture tests: every frozen snapshot, run through each board, must reproduce the frozen output
 // exactly. Any difference fails until it's confirmed as intended (see scripts/freeze-fixture.mjs).
 //
-// By default the boards under test are the baseline copies in sp-tools-config/baseline/. Point a
-// board at other code with e.g. SP_APP_DIR_MARGIN_BOARD=<folder> (used once apps/ builds exist).
+// The boards under test are assembled from this repo (core/ + apps/<app>/src) plus SP's settings,
+// exactly as the build deploys them. To test some other copy instead (e.g. a clasp clone), point
+// a board at its folder with SP_APP_DIR_MARGIN_BOARD=<folder> or SP_APP_DIR_PRODUCTION_TRACKER=<folder>.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { configDir } from '../lib/env.mjs';
+import { assembleApp, scriptFiles } from '../lib/assemble.mjs';
 import { frozenSnapshots, loadSnapshot } from './lib/fixture.mjs';
-import { loadGasProject } from './lib/gas.mjs';
+import { loadGasFiles, loadGasProject } from './lib/gas.mjs';
 import { APPS } from './lib/apps.mjs';
 
 /** Up to `max` paths where a and b differ, e.g. jobs[3].contract: 1200 → 1250 */
@@ -38,9 +40,10 @@ test('at least one frozen fixture snapshot exists', () => {
 for (const dir of snapshots) {
   const fx = loadSnapshot(dir);
   for (const [app, def] of Object.entries(APPS)) {
-    const src = process.env['SP_APP_DIR_' + app.toUpperCase().replace(/-/g, '_')] || path.join(configDir(), 'baseline', def.baseline);
+    const override = process.env['SP_APP_DIR_' + app.toUpperCase().replace(/-/g, '_')];
     test(`${fx.name} · ${app} reproduces the frozen output`, () => {
-      const got = def.run(loadGasProject(src), fx);
+      const ctx = override ? loadGasProject(override) : loadGasFiles(scriptFiles(assembleApp(def.baseline)));
+      const got = def.run(ctx, fx);
       const want = fx.expected(app);
       const diff = differences(want, got);
       assert.ok(diff.length === 0, `${app} output changed (expected → got):\n  ` + diff.join('\n  '));

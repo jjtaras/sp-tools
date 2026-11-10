@@ -8,11 +8,13 @@
     "node": ">=26"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "test": "node --test tests/",
     "fixture:record": "node scripts/record-fixture.mjs",
     "fixture:freeze": "node scripts/freeze-fixture.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "exceljs": "4.4.0"
   }
 }
