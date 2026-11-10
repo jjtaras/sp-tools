@@ -20,9 +20,11 @@ export const APPS = {
   },
   'production-tracker': {
     baseline: 'shop-schedule',
-    // refresh(): pull_() -> build(raw, {today, asof, settings: SETTINGS})
+    // refresh(): pull_() -> build(raw, {today, asof, settings: SETTINGS, labor: ASSUMPTIONS.labor})
     run(ctx, fx) {
-      return plain(ctx.build(fx.tracker, { today: fx.meta.today, asof: fx.meta.asof, settings: ctx.SETTINGS }));
+      // Labor items and timesheets are recorded once per snapshot (in innergy-margin.json) and serve both boards.
+      const raw = { ...fx.tracker, labors: fx.tracker.labors || fx.margin.labors, timesheets: fx.tracker.timesheets || fx.margin.timesheets };
+      return plain(ctx.build(raw, { today: fx.meta.today, asof: fx.meta.asof, settings: ctx.SETTINGS, labor: ctx.ASSUMPTIONS.labor }));
     },
   },
 };

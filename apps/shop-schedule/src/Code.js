@@ -61,7 +61,8 @@ function refresh() {
   var data = build(raw, {
     today: Utilities.formatDate(now, TZ, 'yyyy-MM-dd'),
     asof: Utilities.formatDate(now, TZ, "EEE MMM d, yyyy '·' h:mm a"),
-    settings: SETTINGS
+    settings: SETTINGS,
+    labor: ASSUMPTIONS.labor
   });
   saveData_(JSON.stringify(data));
   console.log(data.projects.length + ' projects; skipped ' + data.skipped.length);
@@ -144,7 +145,12 @@ function pull_() {
     if (!res[i * 4]) return;  // project detail came back empty
     proj.push({ detail: res[i * 4], workOrders: res[i * 4 + 1] || [], dates: res[i * 4 + 2], costing: res[i * 4 + 3] || [] });
   });
-  return { projects: proj, purchaseOrders: get_('/api/purchaseOrders') || [], kanban: get_('/api/laborKanbanGridItems') || [] };
+  // Labor comes from timesheets, counted with the same rules as the Margin Board.
+  var months = SPCore.monthsThrough(ASSUMPTIONS.innergy.timesheets_start, new Date()), timesheets = [];
+  getAll_(months.map(function (m) { return ['/api/timeTracking/' + m[0] + '/' + m[1]]; }))
+    .forEach(function (x) { timesheets = timesheets.concat(x || []); });
+  return { projects: proj, purchaseOrders: get_('/api/purchaseOrders') || [], kanban: get_('/api/laborKanbanGridItems') || [],
+           labors: get_('/api/labors') || [], timesheets: timesheets };
 }
 
 /* ------------------------------------------------------------------ storage */
@@ -219,23 +225,41 @@ function kanban_(items) {
            lanes: lanes, readyDate: st === 4 && lane.fin ? lane.fin.entered : null };
 }
 
-function labor_(woCost) {
-  var out = { draftAct: 0, prodAct: 0, plan: 0, postPlan: 0, postAct: 0 };
+var POST_FAB_RX = /FINISH|STAGING|REASSEMBLY/;
+
+/** Actual hours booked to each WO, from timesheets, with the shared labor rules. Overhead is left out. */
+function woHours_(timesheets, rules) {
+  var by = {};
+  (timesheets || []).forEach(function (t) {
+    if (!t.WorkOrderNumber) return;
+    var kind = SPCore.classifyLabor(t.LaborItemName, t.EmployeeDepartment, rules);
+    if (kind === 'overhead') return;
+    var h = hrs_(t.ActivityDuration), x = by[t.WorkOrderNumber] = by[t.WorkOrderNumber] || { draft: 0, other: 0, post: 0 };
+    if (kind === 'drafting') x.draft += h; else x.other += h;
+    if (POST_FAB_RX.test(String(t.LaborItemName || '').toUpperCase())) x.post += h;
+  });
+  return by;
+}
+
+/** Actual hours from timesheets (woHours_); planned hours from Innergy job costing. */
+function labor_(woCost, booked) {
+  booked = booked || { draft: 0, other: 0, post: 0 };
+  var out = { draftAct: booked.draft, prodAct: booked.other, plan: 0, postPlan: 0, postAct: booked.post };
   ((woCost && woCost.LaborItems) || []).forEach(function (li) {
-    if (li.JobCosting !== 'Cost To Project') return;  // Generic = PM / coordinator / production manager overhead
-    var a = hrs_(li.ActualHours), p = hrs_(li.PlannedHours), nm = (li.Name || '').toUpperCase();
-    if (nm.indexOf('DRAFT') >= 0) out.draftAct += a; else out.prodAct += a;
+    if (li.JobCosting !== 'Cost To Project') return;
+    var p = hrs_(li.PlannedHours);
     out.plan += p;
-    if (/FINISH|STAGING|REASSEMBLY/.test(nm)) { out.postPlan += p; out.postAct += a; }
+    if (POST_FAB_RX.test((li.Name || '').toUpperCase())) out.postPlan += p;
   });
   return out;
 }
 
 function addDays_(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
-/** raw = {projects:[{detail,workOrders,dates,costing}], purchaseOrders, kanban}; opts = {today, asof, settings} */
+/** raw = {projects:[{detail,workOrders,dates,costing}], purchaseOrders, kanban, labors, timesheets}; opts = {today, asof, settings, labor} */
 function build(raw, opts) {
   var S = opts.settings, TODAY = opts.today;
+  var BOOKED = woHours_(raw.timesheets, SPCore.laborRules(raw.labors, opts.labor));
   // POs by WO; project-only lines are "unassigned"
   var poByWo = {}, poUn = {};
   (raw.purchaseOrders || []).forEach(function (po) {
@@ -292,7 +316,7 @@ function build(raw, opts) {
       if (w.Type !== 'Production') return;
       var si = /^\d\d/.test(step) ? +step.slice(0, 2) + 1 : 1;
       var steps = stepsRaw && stepsRaw.length === 7 ? stepsRaw.map(function (s) { return [d10_(s.TargetDate) || '', d10_(s.ActualDate) || '']; }) : null;
-      var L = labor_(cost[n]), price = val_(w.GrandTotalPrice), ov = overrides[n];
+      var L = labor_(cost[n], BOOKED[w.Number]), price = val_(w.GrandTotalPrice), ov = overrides[n];
       var value = ov != null ? ov : price, po = poByWo[w.Number] || 0;
       var shopValue = value * (1 - instShare), reserve = shopValue * S.material_reserve_pct;
       var budget = Math.max(shopValue * S.cogs_labor_pct - Math.max(reserve, po), 0);

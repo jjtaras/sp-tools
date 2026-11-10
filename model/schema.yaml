@@ -26,10 +26,10 @@ assumptions:
   # ---- labor (both boards)
   labor.rate_drafting:      { type: number, unit: "$/hr", used_by: [margin-board, production-tracker], description: "Burdened rate for drafting hours" }
   labor.rate_other:         { type: number, unit: "$/hr", used_by: [margin-board, production-tracker], description: "Burdened rate for everyone else" }
-  labor.overhead_items:     { type: list<string>, used_by: [margin-board], description: "Innergy labor items that are overhead, never job cost, even when booked to a job" }
-  labor.drafting_department_prefix: { type: string, used_by: [margin-board], description: "Hours by people whose Innergy department starts with this are drafting" }
-  labor.drafting_type_prefix:       { type: string, used_by: [margin-board], description: "Labor items whose Innergy Type starts with this are drafting" }
-  labor.drafting_items:             { type: list<string>, used_by: [margin-board], description: "Other labor items that are drafting" }
+  labor.overhead_items:     { type: list<string>, used_by: [margin-board, production-tracker], description: "Innergy labor items that are overhead, never job cost, even when booked to a job" }
+  labor.drafting_department_prefix: { type: string, used_by: [margin-board, production-tracker], description: "Hours by people whose Innergy department starts with this are drafting" }
+  labor.drafting_type_prefix:       { type: string, used_by: [margin-board, production-tracker], description: "Labor items whose Innergy Type starts with this are drafting" }
+  labor.drafting_items:             { type: list<string>, used_by: [margin-board, production-tracker], description: "Other labor items that are drafting" }
 
   # ---- shop capacity and the shop-hours predictor (Production Tracker)
   shop.material_reserve_share:     { type: share,  used_by: [production-tracker], description: "Materials reserve; the value rule takes off the greater of this share or POs on the WO" }
@@ -49,7 +49,7 @@ assumptions:
   # ---- margin board behavior
   board.recent_days:               { type: number, used_by: [margin-board], description: "'Still logging hours' window for fully billed jobs" }
   board.stale_after_hours:         { type: number, used_by: [margin-board], description: "Page warns when data is older than this" }
-  innergy.timesheets_start:        { type: month,  used_by: [margin-board], description: "First month of timesheets in Innergy" }
+  innergy.timesheets_start:        { type: month,  used_by: [margin-board, production-tracker], description: "First month of timesheets in Innergy" }
   innergy.not_jobs:                { type: list<string>, used_by: [margin-board], description: "Innergy projects that aren't real jobs" }
 
   # ---- progress and outlook (Margin Board)

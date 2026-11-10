@@ -248,15 +248,7 @@ function matchBilling(billing, projects) {
   });
 }
 
-function monthList_(start, end) {
-  var y = +start.slice(0, 4), m = +start.slice(5, 7), out = [];
-  var ey = end.getFullYear(), em = end.getMonth() + 1;
-  while (y < ey || (y === ey && m <= em)) {
-    out.push([y, m]);
-    m++; if (m > 12) { m = 1; y++; }
-  }
-  return out;
-}
+function monthList_(start, end) { return SPCore.monthsThrough(start, end); }
 
 // ---------------------------------------------------------------- the math
 // buildBoard is pure: Innergy data in, board data out. No Apps Script calls.
