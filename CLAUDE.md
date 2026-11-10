@@ -12,7 +12,7 @@ Goal: one versioned set of shop cost assumptions that every app reads, so changi
 
 - **This repo (Jeffrey's, personal GitHub):** the generic engine. Margin, burn and shop-hours math, pace verdicts, the assumptions *schema*, build/deploy tooling, test harness.
 - **SP-owned location (outside this repo):** the actual assumption *values*, job fixtures, Innergy and Billing Sheet credentials, the deployed Apps Script projects. The build reads these in; nothing SP-specific gets committed here.
-- Before going further, send Alex and Chris a written note that Jeffrey keeps the rights to the tooling and SP gets a perpetual license to use and modify it.
+- Done (sent 2026-11-10): written note to Alex and Chris that Jeffrey keeps the rights to the tooling and SP gets a perpetual license to use and modify it.
 
 ## Layout
 
@@ -48,10 +48,10 @@ Jeffrey works on this from the Mac (home) and the Windows 11 PC (work). GitHub i
 
 ## First tasks
 
-0. Set up the repo: `git init`, `.gitignore`, `.gitattributes`, `.nvmrc`, then the first commit and push to GitHub.
-1. `clasp clone` both existing Apps Script projects into `apps/`, commit as-is (baseline, no changes).
+0. ~~Set up the repo: `git init`, `.gitignore`, `.gitattributes`, `.nvmrc`, then the first commit and push to GitHub.~~ Done 2026-11-10 (remote uses HTTPS).
+1. ~~`clasp clone` both existing Apps Script projects, baseline with no changes.~~ Done 2026-11-10, **but the baseline went to `sp-tools-config/baseline/` on Drive, not into `apps/`.** Both projects hardcode SP values (rates, job numbers, WO values, Billing Sheet ID, client names), so committing them as-is would break the ownership split. App code enters `apps/` only once those values are split out. See the SP config CHANGELOG for file hashes.
 2. Pull the duplicated logic out of both into `core/`, without changing any outputs. Fixtures prove it.
-3. Write `model/schema.yaml`, create `sp-tools-config/` on Drive, and move the hardcoded numbers into its `assumptions.yaml` (seed values below). Fixtures must still pass.
+3. Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml` (seed values below). Fixtures must still pass. (`sp-tools-config/` itself was created 2026-11-10.)
 4. Set up the build plus deploy script, and redeploy both boards from the repo.
 
 ## SP config location (decided Nov 2026)
