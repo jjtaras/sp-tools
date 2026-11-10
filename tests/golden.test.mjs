@@ -12,25 +12,7 @@ import { assembleApp, scriptFiles } from '../lib/assemble.mjs';
 import { frozenSnapshots, loadSnapshot } from './lib/fixture.mjs';
 import { loadGasFiles, loadGasProject } from './lib/gas.mjs';
 import { APPS } from './lib/apps.mjs';
-
-/** Up to `max` paths where a and b differ, e.g. jobs[3].contract: 1200 → 1250 */
-function differences(a, b, at = '', out = [], max = 25) {
-  if (out.length >= max) return out;
-  if (a === b || (Number.isNaN(a) && Number.isNaN(b))) return out;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) {
-    out.push(`${at || '(root)'}: ${JSON.stringify(a)} → ${JSON.stringify(b)}`);
-    return out;
-  }
-  if (Array.isArray(a) && a.length !== b.length) out.push(`${at}: length ${a.length} → ${b.length}`);
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  for (const k of keys) {
-    const label = Array.isArray(a) ? `${at}[${k}]` : at ? `${at}.${k}` : k;
-    // Name the job when walking a list of job rows, so failures read "jobs[P-00-0000].contract".
-    const id = Array.isArray(a) && a[k] && (a[k].job || a[k].project?.num);
-    differences(a[k], b[k], id ? `${at}[${id}]` : label, out, max);
-  }
-  return out;
-}
+import { differences } from './lib/diff.mjs';
 
 const snapshots = frozenSnapshots();
 test('at least one frozen fixture snapshot exists', () => {
