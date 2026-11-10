@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push)",
+      "Bash(git push origin main)",
+      "Bash(git push --tags)",
+      "Bash(git push origin --tags)",
+      "Bash(git push origin v*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)"
+    ]
+  }
+}
