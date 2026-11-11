@@ -23,6 +23,7 @@ adapters/innergy/        # Innergy API client (Node; used to record fixtures)
 adapters/billing-sheet/  # SP Billing Dashboard reader (.xlsx download → getValues()-style grids)
 apps/profitability/      # Margin Board: src/Code.js, app.json (file list), appsscript.json, CHANGELOG.md
 apps/shop-schedule/      # Production Tracker: same shape
+apps/shared/             # the one look both boards share (design.css, head.html); inlined at build
 lib/                     # env/.env loading, app assembly, core bundling
 scripts/                 # build, record-fixture, freeze-fixture
 tests/                   # core unit tests + fixture tests; fixtures load from the SP config location

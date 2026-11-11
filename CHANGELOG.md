@@ -4,6 +4,11 @@ Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGE
 
 ## Unreleased
 
+### Shared design
+- `apps/shared/design.css` + `head.html`: one look for every board, taken from the Production Tracker: fonts (Archivo, Archivo Narrow, IBM Plex Mono), colors (light and dark), header, stat strip, cards, tables, pills, filters and buttons. The build inlines it wherever a page has `<!-- @design -->`.
+- The tracker renders pixel-identical with its styles moved into the shared file (full-page screenshot compare).
+- The Margin Board was rebuilt on the shared design: tracker-style header (eyebrow, condensed title, meta line), stat strip, square cards, uppercase section labels, monospace numbers, tracker pills for verdicts and flag levels, and the same palette in its charts.
+
 ### Step 3: one assumptions file, shared rules, no numbers in pages
 - `model/schema.yaml` + `lib/assumptions.mjs`: SP's `assumptions.yaml` is validated (types, required value/since/source, cross-checks) and bundled into every board as `ASSUMPTIONS`. Both boards' only SP input is that file.
 - Rule thresholds that were literals in code or pages are now assumptions (flags, outlook, receiving guard, lookback, schedule, capacity warning, phase shares).
