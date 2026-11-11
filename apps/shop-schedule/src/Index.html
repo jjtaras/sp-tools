@@ -144,6 +144,8 @@ details[open] .chev{transform:rotate(45deg)}
 
   <div class="stats" id="stats"></div>
 
+  <div class="readfirst" id="readfirst" hidden></div>
+
   <div class="filters">
     <label>PM <select id="fPM"><option value="">All PMs</option></select></label>
     <label>Job <select id="fJob"><option value="">All jobs</option></select></label>
@@ -344,6 +346,8 @@ ACTIVE.forEach(w=>{
   if(left>0.01){const x=new Date(last||s);if(last)x.setDate(x.getDate()+1);
     for(;left>0.01;x.setDate(x.getDate()+1)){const g=x.getDay();if(!g||g>5)continue;const h=Math.min(capD,left);put(x,h);left-=h;w.projEnd=new Date(x)}}
 });
+// Shop load: CNC + fab + finishing. Drafting isn't shop work (drafters aren't in the shop crew); it shows under Bottlenecks by area.
+ACTIVE.forEach(w=>{w.shop=w.load.map((_,k)=>w.loadP.cnc[k]+w.loadP.fab[k]+w.loadP.fin[k])});
 ACTIVE.forEach(w=>{if(!w.projEnd||w.done||w.hold) return;
   const msg=`At ${ST.max_hrs_per_wo_per_day} hrs/day, finishes about ${f(w.projEnd)}, ${shopDays(new Date(w.cdD.getTime()+DAY),w.projEnd)} shop days after critical`;
   if(w.st==='ok'||w.st==='watch') w.st='risk';
@@ -468,7 +472,7 @@ function render(){
   const A=PS.flatMap(P=>P.active);
   document.getElementById('pmeta').innerHTML=`<span><b>${PS.filter(P=>!P.onHold).length}</b> active jobs</span><span><b>${A.length}</b> open production WOs</span><span>Shop capacity <b class="mono">${CAP} hrs/wk</b> (${ST.shop_crew} × ${ST.hours_per_week})</span>${pm?`<span>Filtered to <b>${esc(pm)}</b></span>`:''}`;
   const load=new Array(NW).fill(0),loadR=new Array(NW).fill(0);
-  A.forEach(w=>w.load.forEach((h,k)=>{load[k]+=h;if(w.st==='late'||w.st==='risk')loadR[k]+=h}));
+  A.forEach(w=>w.shop.forEach((h,k)=>{load[k]+=h;if(w.st==='late'||w.st==='risk')loadR[k]+=h}));
   const late=A.filter(w=>w.st==='late'),risk=A.filter(w=>w.st==='risk');
   const due5=A.filter(w=>w.sdays>=0&&w.sdays<=ASM.schedule.due_soon_shop_days);
   const fcT=A.reduce((s,w)=>s+w.fcH,0);
@@ -481,7 +485,7 @@ function render(){
   // read first
   const rf=[];
   const over=load.map((h,k)=>({h,k})).filter(x=>x.h>CAP);
-  if(CAP) rf.push(`<p><b>Capacity:</b> ${over.length?`forecast work is over ${CAP} hrs in ${over.length} of the next ${NW} weeks (${over.map(x=>{const d=new Date(W0);d.setDate(d.getDate()+x.k*7);return `${f(d)}: ${hr0(x.h)}`}).join(', ')}).`:`no week in the next ${NW} goes over ${CAP} hrs; peak is ${hr0(Math.max(...load))} hrs.`} This counts only work that has a critical date ahead of it, so later weeks fill in as jobs get dated.</p>`);
+  if(CAP) rf.push(`<p><b>Capacity:</b> ${over.length?`forecast shop work is over ${CAP} hrs in ${over.length} of the next ${NW} weeks (${over.map(x=>{const d=new Date(W0);d.setDate(d.getDate()+x.k*7);return `${f(d)}: ${hr0(x.h)}`}).join(', ')}).`:`no week in the next ${NW} goes over ${CAP} hrs; peak is ${hr0(Math.max(...load))} hrs.`} This counts only work that has a critical date ahead of it, so later weeks fill in as jobs get dated.</p>`);
   if(late.length){const by={};late.forEach(w=>(by[jobLabel(w.P)]=(by[jobLabel(w.P)]||0)+1));rf.push(`<p><b>Late:</b> ${late.length} WOs across ${Object.keys(by).length} jobs (${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)} ${v}`).join(', ')}).</p>`)}
   const novalue=A.filter(w=>w.fc.vsrc==='none'&&(w.inst||w.code)&&!w.nonshop);
   if(novalue.length) rf.push(`<p><b>No WO value:</b> ${novalue.length} open WOs have a $0 price, so they have no forecast hours until a value is entered. They're on the fix list.</p>`);
@@ -502,19 +506,20 @@ function render(){
     ['cnc','fab','fin','draft'].map(p=>{const c=areaCap(p),ppl=AREA[p]?CREW[AREA[p]]:null;
       return `<tr><td class="area"><b>${PHN[p]}</b><small>${c?`${ppl} people · ${hr0(c)} hrs/wk`:'not in shop capacity'}</small></td>`+
         loadP[p].map(h=>`<td class="num ${lvl(h,c)}">${h>=0.5?hr0(h):'·'}${c&&h>=0.5?`<small>${Math.round(h/c*100)}%</small>`:''}</td>`).join('')+'</tr>'}).join('')+'</tbody>';
-  (document.getElementById('readfirst')||{}).innerHTML=rf.join('');
+  if(bnSum.length) rf.unshift(`<p><b>Bottlenecks:</b> ${bnSum.join('. ')}.</p>`);
+  const RF=document.getElementById('readfirst'); RF.innerHTML=rf.join(''); RF.hidden=!rf.length;
   // load chart
   const mx=Math.max(...load,CAP,1),LH=150;
-  (document.getElementById('loadsub')||{}).textContent=`Amber = late or at risk. Dashed line = ${CAP} hr capacity.`;void ` Each WO's hours are spread evenly over the shop days from now (or its planned start, if it isn't in the shop yet) to its critical date, at no more than ${ST.max_hrs_per_wo_per_day} hrs a day per WO. Hours that don't fit run past the critical date at that rate. Amber is late or at-risk work. Dashed line is shop capacity (${ST.shop_crew} × ${ST.hours_per_week} = ${CAP} hrs, before time off).`;
+  (document.getElementById('loadsub')||{}).textContent=`Shop work only: CNC, fab and finishing (drafting is under Bottlenecks by area). Amber = late or at risk. Dashed line = ${CAP} hr capacity.`;void ` Each WO's hours are spread evenly over the shop days from now (or its planned start, if it isn't in the shop yet) to its critical date, at no more than ${ST.max_hrs_per_wo_per_day} hrs a day per WO. Hours that don't fit run past the critical date at that rate. Amber is late or at-risk work. Dashed line is shop capacity (${ST.shop_crew} × ${ST.hours_per_week} = ${CAP} hrs, before time off).`;
   const LD=document.getElementById('load');LD.style.gridTemplateColumns=`repeat(${NW},minmax(46px,1fr))`;LD.style.minWidth=(NW*52)+'px';
   document.getElementById('load').innerHTML=load.map((t,k)=>{const wk=new Date(W0);wk.setDate(wk.getDate()+k*7);const a=loadR[k];
-    const top=A.filter(w=>w.load[k]>0).reduce((m,w)=>{const j=jobLabel(w.P);m[j]=(m[j]||0)+w.load[k];return m},{});
+    const top=A.filter(w=>w.shop[k]>0).reduce((m,w)=>{const j=jobLabel(w.P);m[j]=(m[j]||0)+w.shop[k];return m},{});
     const tip=Object.entries(top).sort((x,y)=>y[1]-x[1]).slice(0,6).map(([j,h])=>`${j}: ${hr0(h)}`).join('\n');
     return `<div class="lcol${k===0?' now':''}" title="${esc(tip)}"><div class="lval">${t?hr0(t):''}</div><div class="lstack" style="height:${(t/mx*LH).toFixed(1)}px"><div class="a" style="height:${t?a/t*100:0}%"></div><div class="b" style="height:${t?(t-a)/t*100:0}%"></div></div><div class="lwk">${f(wk)}</div><div class="lpct">${CAP&&t?Math.round(t/CAP*100)+'%':''}</div></div>`}).join('')+(CAP?`<div class="cap" id="capline"><span>Capacity ${CAP} hrs/wk</span></div>`:'');
   if(CAP){const L=document.getElementById('load'),cl=document.getElementById('capline'),st=L.querySelector('.lstack');const place=()=>{cl.style.top=(st.getBoundingClientRect().bottom-L.getBoundingClientRect().top-CAP/mx*LH)+'px'};place();window.onresize=place}
   // project table
   document.getElementById('ptable').innerHTML=`<thead><tr><th>Job</th><th>PM</th><th>Status</th><th class="num">Open WOs</th><th>Next critical</th><th class="num">Hrs this week</th><th class="num">Next 4 wks</th><th class="num cal">Staged WOs budget used</th></tr></thead><tbody>`+
-    PS.map(P=>{const wk0=P.active.reduce((s,w)=>s+w.load[0],0),wk4=P.active.reduce((s,w)=>s+w.load.slice(0,4).reduce((a,b)=>a+b,0),0);
+    PS.map(P=>{const wk0=P.active.reduce((s,w)=>s+w.shop[0],0),wk4=P.active.reduce((s,w)=>s+w.shop.slice(0,4).reduce((a,b)=>a+b,0),0);
       return `<tr class="click" data-key="${P.key}"><td><b>${esc(P.project.num)}</b> ${esc(P.project.client)}${P.project.site?' · '+esc(P.project.site):''}</td><td>${esc(P.project.pm)}</td><td><div class="pills">${pills(P)}</div></td><td class="num mono">${P.active.length}</td><td class="mono">${P.nextCd?fl(P.nextCd):'–'}</td><td class="num mono">${wk0?hr0(wk0):'–'}</td><td class="num mono">${wk4?hr0(wk4):'–'}</td><td class="num mono cal">${P.calB>0?Math.round(P.calS/P.calB*100)+'%':'–'}</td></tr>`}).join('')+
     `<tr class="sub"><td>All jobs</td><td></td><td></td><td class="num mono">${A.length}</td><td></td><td class="num mono">${hr0(load[0])}</td><td class="num mono">${hr0(load.slice(0,4).reduce((a,b)=>a+b,0))}</td><td class="cal"></td></tr></tbody>`;
   document.querySelectorAll('#ptable tr.click').forEach(r=>r.onclick=()=>{STATE.job=r.dataset.key;fJob.value=STATE.job;render();document.getElementById('schedule').scrollIntoView({behavior:'smooth',block:'start'})});

@@ -2,6 +2,11 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.2.0 (2026-11-10)
+
+- Shop load (chart, This week / Next week, capacity note, per-job hours) counts CNC + fab + finishing only; drafting moved to Bottlenecks by area.
+- Read-first box under the stat strip: bottlenecks, capacity, late WOs, WOs with no value (hidden when empty). These notes were computed before but never shown.
+
 ## 1.1.0 (2026-11-10)
 
 - New "Bottlenecks by area" section: weekly forecast hours for CNC, fab and finishing against each area's capacity, plus drafting for reference. Hours are split by the phase shares over the phases each WO has ahead, worked in order. Amber/red over 85% / 100%, with a summary of which areas go over and when.
