@@ -2,6 +2,10 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.0.1 (2026-11-10)
+
+No change to this board; redeployed so both boards run the same assumptions (config fingerprint).
+
 ## 1.0.0 (2026-11-10)
 
 First deploy from the sp-tools repo (replaces the hand-edited Apps Script version).
