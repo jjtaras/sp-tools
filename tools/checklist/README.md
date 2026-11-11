@@ -135,6 +135,40 @@ a drawing error, flagged in the warnings and marked `(CHECK RECSET)` on the shee
   wrapping a long group onto the next row, at 9 pt down to 6 pt. If even that won't fit, the last
   row reads `+ N MORE - SEE RECSET SCHEDULE` and a warning says so.
 
+**Finishes** come from the FINISHES legend in the title block: codes in a narrow left column,
+descriptions to their right (one or two lines, joined to the nearest code), ending at the
+shop-foreman stamp. The legend says what finishes there are, not which surface gets which, so the
+sheet follows how PMs have filled it in:
+
+| Field | From the legend |
+|---|---|
+| Interior | the prefinished (PF) finish if any, else the same as exterior |
+| Edges, Exterior | the other shop finishes: primer as `SHOP PRIMED (PT01)`, paint, wood/veneer; paint marked by others / field painted becomes `SHOP PRIMED - FINAL PAINT … BY OTHERS` |
+| Color sample | paint colours and woods to match, else NONE |
+| Control sample | NONE (the PM changes it when one exists) |
+| Materials | `PRIMER - SHOP STOCK` when primed |
+
+Wallpaper and fabric (WP, U/UO) are left off. A note every entry repeats (`TO MATCH APPROVED SAMPLE`)
+is written once at the end. With no legend, the finish words in the callouts are the fallback, with
+a warning. Where one RECSET covers several WOs (1504's doors), it lists every finish and the PM
+deletes the ones that don't apply. A finish still `TBD` or `RFI` gets a warning.
+
+**The finish page overrides the table above.** Newer RECSETs carry a page mapping finishes onto
+the elevations: a swatch key (`PT01 - BM 1636 PROVIDENCE BLUE` beside a coloured square) and the
+same colours on the drawings. It's found by its swatch key, whatever the page title.
+
+- **Callouts** that name a surface and a code set that surface: `ALL INTERIORS AND FRONT EDGES TO BE
+  PAINTED BY SP, PT01` → interior and edges = PT01. `EXPOSED FACES` / `EXTERIOR` → exterior; drawer
+  or door faces are added to the exterior line by name; `PAINTED IN FIELD BY OTHER` → shop primed,
+  final paint by others. A callout code missing from the legend is warned about (1516 Towel Station
+  says PT02 where its legend's primer is PT01).
+- **Colour only** (no callouts, e.g. 1516 Library): each key colour is located on a render of the
+  page and assigned to the view label below it. A finish on some views but not all is written with
+  where it is, `BM 1636 PROVIDENCE BLUE SATIN (PT01) AT EAST ELEVATION; ELSEWHERE SHOP PRIMED (PT02)`,
+  on interior and edges, with a warning, because colour alone doesn't say which surface. Grey
+  swatches can't be told from linework and aren't located.
+- Finishes in the key but not the legend (1516 Study's `VN01 - PREFIN MAPLE`) are added.
+
 A RECSET with no hardware schedule gives NONE; on several jobs the PM's hardware came from
 elsewhere (shop stock, client supplied). A RECSET with no extractable text (outlined or scanned,
 e.g. 1884) gives nothing at all.

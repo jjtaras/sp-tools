@@ -139,41 +139,191 @@ def _section_below(doc, header, max_rows=12, max_dx=260, max_gap=300):
     return []
 
 
-def _finishes_legend(doc):
-    """The FINISHES legend, when the drawing carries one.
+FINISH_CODE = re.compile(r"^([A-Z]{1,3}\d{1,2}[A-Z]?)\b\s*(.*)$")
+# The client/shop approval stamp. Not bare "approved": legends and notes say "TO MATCH APPROVED SAMPLE".
+STAMP = re.compile(r"(?i)approved by|approved as|foreman|reject|revise and|signature|print name|company")
 
-    Some sheets code finishes rather than calling them out on the geometry:
-    `PT01  PRIMER` / `PF01  PREFINISHED MAPLE`. Returns {code: description}.
+
+def _finish_entries(doc):
+    """The FINISHES legend -> [{'code': 'PT01', 'description': 'BM 1636 PROVIDENCE BLUE SATIN'}, ...].
+
+    Layout on SP's title block: the codes sit in a narrow column at the left of the legend and the
+    descriptions to their right, each code centred on its description (which may run two lines,
+    'RIFT CUT SOLID OAK:' / 'TO MATCH APPROVED SAMPLE'). Some drawings put code and description in
+    one text line ('WD02 GREY STAINED OAK WOOD VENEER'). Description lines join the nearest code.
+    The legend ends at the shop-foreman approval stamp; text further left is room tags, not finishes.
     """
-    out = {}
     for page in doc:
         lines = _lines(page)
         anchors = [l for l in lines if l[4].strip().upper() == "FINISHES"]
         if not anchors:
             continue
         hy0, hx0, hx1, hy1, _ = anchors[0]
-        rows = {}
+        stops = [l[0] for l in lines if l[0] > hy1 and abs(l[1] - hx0) < 260 and STAMP.search(l[4])]
+        bottom = min(stops) if stops else hy1 + 240
+        codes, descs = [], []
         for ly0, lx0, lx1, ly1, text in lines:
-            if ly0 <= hy1 or ly0 - hy1 > 300:
-                continue
-            if abs(lx0 - hx0) > 260:
-                continue
             t = text.strip()
-            if not t or NOISE.match(t):
+            if not t or ly0 <= hy1 or ly0 >= bottom or not (hx0 - 90 <= lx0 <= hx0 + 260):
                 continue
-            # The client-approval stamp sits in the same column on some sheets.
-            if re.search(r"(?i)approv|reject|revise|signature|print name|company|foreman", t):
-                continue
-            rows.setdefault(round(ly0 / 8), []).append((lx0, t))
-        for key in sorted(rows):
-            cells = [t for _, t in sorted(rows[key])]
-            if len(cells) >= 2:
-                out[cells[0]] = " ".join(cells[1:])
-            elif cells:
-                out.setdefault(cells[0], "")
-        if out:
-            return out
+            yc = (ly0 + ly1) / 2
+            m = FINISH_CODE.match(t)
+            if m and lx0 < hx0 - 20:  # in the code column
+                codes.append({"y": yc, "code": m.group(1), "parts": [m.group(2)] if m.group(2) else []})
+            elif not NOISE.match(t):
+                descs.append((yc, t))
+        if not codes and not descs:
+            continue
+        if not codes:  # a legend without codes: keep the descriptions
+            return [{"code": "", "description": t} for _, t in sorted(descs)]
+        for yc, t in sorted(descs):
+            nearest = min(codes, key=lambda c: abs(c["y"] - yc))
+            nearest["parts"].append(t)
+        return [
+            {"code": c["code"], "description": re.sub(r"\s+", " ", " ".join(c["parts"])).strip(" :")}
+            for c in sorted(codes, key=lambda c: c["y"])
+        ]
+    return []
+
+
+def _finishes_legend(doc):
+    """{code: description} from the FINISHES legend (kept for older callers)."""
+    return {e["code"] or e["description"]: e["description"] if e["code"] else "" for e in _finish_entries(doc)}
+
+
+# --- The finish map ------------------------------------------------------------------------------
+# Newer RECSETs carry a page that shows which surface gets which finish: elevations coloured by
+# finish, a swatch key ('PT01 - BM 1636 PROVIDENCE BLUE' beside a coloured square), and often
+# callouts that say it in words ('ALL INTERIORS AND FRONT EDGES TO BE PAINTED BY SP, PT01').
+# Callouts are the authority; where a page has none (1516 Library), where each colour falls says
+# which views carry that finish, but not which surfaces.
+KEY_LABEL = re.compile(r"^([A-Z]{1,3})-?(\d{1,2}[A-Z]?)\s*[-–]\s*(.+)$")
+CODE_IN_TEXT = re.compile(r"\b([A-Z]{1,3})-?(\d{2}[A-Z]?)\b")
+VIEW_LABEL = re.compile(r"(?i)\b(elevation|section|plan|view|detail)\b")
+SURFACES = {
+    "interior": re.compile(r"(?i)\binteriors?\b"),
+    "edges": re.compile(r"(?i)\bedges?\b"),
+    "exterior": re.compile(r"(?i)\bexteriors?\b|\bexposed\b"),
+    "faces": re.compile(r"(?i)\b(drawers?|doors?)\s+faces?\b"),  # drawer/door fronts, named apart from the case
+}
+CALLOUT_FINISH = re.compile(r"(?i)paint|prime|stain|lacquer|finish|clear coat|seal")
+
+
+def _swatches(page, lines):
+    """Key swatches -> [{'code', 'description', 'color', 'rect'}]: a filled square with a code label to its right."""
+    out = []
+    for dr in page.get_drawings():
+        fill, r = dr.get("fill"), dr["rect"]
+        if not fill or not (12 <= r.width <= 70) or abs(r.width - r.height) > 3:
+            continue
+        beside = [l for l in lines if 0 <= l[1] - r.x1 <= 45 and r.y0 - 6 <= (l[0] + l[3]) / 2 <= r.y1 + 6]
+        if not beside:
+            continue
+        beside.sort(key=lambda l: l[0])
+        m = KEY_LABEL.match(beside[0][4].strip())
+        if not m:
+            continue
+        # A label can wrap: 'WD01 - RIFT WHITE OAK W/ CUSTOM' / 'STAIN MATCH CLIENT REFERENCE'.
+        desc = " ".join([m.group(3)] + [l[4].strip() for l in beside[1:] if not KEY_LABEL.match(l[4].strip())])
+        out.append({"code": m.group(1) + m.group(2), "description": re.sub(r"\s+", " ", desc).strip(),
+                    "color": tuple(int(round(c * 255)) for c in fill[:3]), "rect": r})
     return out
+
+
+def _callout_blocks(lines, exclude_x):
+    """Join the drawing's text lines into callout blocks (left- or right-aligned, stacked closely)."""
+    body = sorted((l for l in lines if l[1] < exclude_x and len(l[4].strip()) > 1), key=lambda l: (l[0], l[1]))
+    blocks = []
+    for l in body:
+        h = max(l[3] - l[0], 4)
+        for b in blocks:
+            last = b[-1]
+            aligned = abs(l[1] - last[1]) < 6 or abs(l[2] - last[2]) < 6
+            if aligned and 0 <= l[0] - last[3] < h * 0.9:
+                b.append(l)
+                break
+        else:
+            blocks.append([l])
+    return [" ".join(x[4].strip() for x in b) for b in blocks]
+
+
+def _color_views(page, swatches, lines, exclude_x, dpi=36):
+    """{code: [view labels]} for each coloured (non-grey) swatch, from where its tint shows on the page."""
+    keyed = [s for s in swatches if max(s["color"]) - min(s["color"]) > 20]  # greys look like linework
+    if not keyed:
+        return {}
+    views = [l for l in lines if VIEW_LABEL.search(l[4]) and l[1] < exclude_x and len(l[4]) < 40]
+    pix = page.get_pixmap(dpi=dpi)
+    scale = 72 / dpi
+    samples = pix.samples
+    n = pix.n
+    counts = {}
+    for py in range(pix.height):
+        y = py * scale
+        row = py * pix.stride
+        for px in range(pix.width):
+            x = px * scale
+            if x >= exclude_x:
+                break
+            o = row + px * n
+            e = (255 - samples[o], 255 - samples[o + 1], 255 - samples[o + 2])
+            if max(e) - min(e) < 6 or max(e) > 200:  # grey/white/black: linework, not a fill
+                continue
+            if any(s["rect"].x0 - 2 <= x <= s["rect"].x1 + 2 and s["rect"].y0 - 2 <= y <= s["rect"].y1 + 2 for s in keyed):
+                continue
+            best, score = None, 0.93
+            for s in keyed:
+                d = tuple(255 - c for c in s["color"])
+                dot = sum(a * b for a, b in zip(e, d))
+                norm = (sum(a * a for a in e) * sum(b * b for b in d)) ** 0.5
+                if norm and dot / norm > score:
+                    best, score = s, dot / norm
+            if not best:
+                continue
+            # The view a fill belongs to: the label below it whose left edge is nearest on its left.
+            below = [v for v in views if v[0] > y and v[1] - 60 <= x]
+            if not below:
+                continue
+            col = max(v[1] for v in below)
+            view = min((v for v in below if abs(v[1] - col) < 120), key=lambda v: v[0] - y)
+            key = (best["code"], view[4].strip().upper())
+            counts[key] = counts.get(key, 0) + 1
+    out = {}
+    for (code, view), c in sorted(counts.items()):
+        if c >= 25:
+            out.setdefault(code, []).append(view)
+    return out
+
+
+def _finish_map(doc):
+    """The finish-map page(s) -> {'page', 'swatches', 'callouts', 'views', 'all_views'} or None."""
+    for i, page in enumerate(doc):
+        lines = _lines(page)
+        swatches = _swatches(page, lines)
+        if len(swatches) < 2:
+            continue
+        # The title block (hatch key, legend, stamp) is at the right; keep the drawing body only.
+        tb = [l[1] for l in lines if l[4].strip().upper() in ("HATCH KEY", "FINISHES", "PROJECT")]
+        exclude_x = min(tb) - 40 if tb else page.rect.width
+        callouts = []
+        for text in _callout_blocks(lines, exclude_x):
+            t = re.sub(r"\s+", " ", text).strip()
+            if KEY_LABEL.match(t):
+                continue
+            codes = [a + b for a, b in CODE_IN_TEXT.findall(t)]
+            surfaces = [k for k, rx in SURFACES.items() if rx.search(t)]
+            if codes and (surfaces or CALLOUT_FINISH.search(t)):
+                callouts.append({"text": t, "codes": codes, "surfaces": surfaces})
+        all_views = sorted({l[4].strip().upper() for l in lines if VIEW_LABEL.search(l[4]) and l[1] < exclude_x and len(l[4]) < 40})
+        return {
+            "page": i + 1,
+            "swatches": [{k: s[k] for k in ("code", "description", "color")} for s in swatches],
+            "callouts": callouts,
+            # Colour is the slow pass (a raster scan); only needed when no callout names a surface.
+            "views": {} if any(c["surfaces"] for c in callouts) else _color_views(page, swatches, lines, exclude_x),
+            "all_views": all_views,
+        }
+    return None
 
 
 def _callouts(doc):
@@ -268,7 +418,7 @@ def _hardware_tables(doc):
                 t = text.strip()
                 if ly0 <= hy1 + 1 or ly0 >= bottom or lx1 < left or lx0 > right or not t:
                     continue
-                if re.search(r"(?i)approv|reject|revise|signature|print name|company", t):
+                if STAMP.search(t):
                     continue
                 cx = (lx0 + lx1) / 2
                 col = min(centres, key=lambda c: abs(c[0] - cx))[1]
@@ -341,6 +491,8 @@ def parse(path):
         "materials_callouts": materials,
         "finish_terms": finishes,
         "finishes_legend": finishes_legend,
+        "finish_entries": _finish_entries(doc),
+        "finish_map": _finish_map(doc),
         "hardware_items": _hardware_tables(doc),
     }
     result["hardware"] = [

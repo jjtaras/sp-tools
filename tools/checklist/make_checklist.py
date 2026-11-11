@@ -351,7 +351,9 @@ def fill_checklist(template, out_path, values, qr_payloads):
                 text = str(values[name])
                 if name in fitted:
                     widget.text_fontsize = fitted[name]
-                    if fitted[name] <= FONT_FLOOR:
+                    # Overflow means it really doesn't fit at the size used, not merely that it
+                    # needed the smallest size (the packer fills rows down to FONT_FLOOR on purpose).
+                    if "\n" not in text and _text_width(text, fitted[name]) > widget.rect.width - FIELD_PADDING:
                         overflow.append((name, text))
                 widget.field_value = text
                 widget.update()
@@ -597,6 +599,156 @@ def _hardware_text(item):
     return re.sub(r"\s+", " ", text)
 
 
+PRIMER_WORDS = re.compile(r"(?i)\bprime[rd]?\b")
+BY_OTHERS = re.compile(r"(?i)by others?\b|in field|field paint|on site|by gc")
+NOT_SHOP = re.compile(r"(?i)^(WP|UO|U|UP|FB)\d")   # wallpaper, upholstery, fabric: not shop finishes
+
+
+def _finish_text(entry):
+    """Legend entry -> sheet text, PM style: 'PREFINISHED MAPLE (PF01)', 'SHOP PRIMED (PT01)'."""
+    code, desc = entry["code"], entry["description"].upper()
+    if PRIMER_WORDS.search(desc) and len(desc.split()) <= 2:
+        desc = FINISH_DEFAULT
+    return f"{desc} ({code})" if code else desc
+
+
+def _finishes_from_legend(entries, terms):
+    """Fill the finish block from the RECSET's FINISHES legend alone.
+
+    The legend says what finishes there are, not which surface gets which, so this follows how
+    the sheets have been filled in (104, 112, 116, 1504):
+      interior          the prefinished (PF) finish if there is one, else the same as exterior
+      edges, exterior   the other shop finishes (primer, paint, wood/veneer); paint marked
+                        'by others' / field painted means the shop primes only
+      color sample      paint colours and woods that have to be matched, else NONE
+      control sample    NONE (the PM changes it when a control sample exists)
+      materials         PRIMER - SHOP STOCK when the job is primed
+    Wallpaper and fabric (WP, UO) aren't shop finishes and are left off. Without a legend, fall
+    back to the finish words in the drawing's callouts.
+    """
+    shop = [e for e in entries if not NOT_SHOP.match(e["code"] or "")]
+    # A note every entry repeats ('RIFT CUT SOLID OAK: TO MATCH APPROVED SAMPLE', ...) goes once at the end.
+    tails = {e["description"].split(":", 1)[1].strip().upper() for e in shop if ":" in e["description"]}
+    shared = tails.pop() if len(tails) == 1 and len(shop) > 1 and all(":" in e["description"] for e in shop) else ""
+    if shared:
+        shop = [{"code": e["code"], "description": e["description"].split(":", 1)[0]} for e in shop]
+    note = f" - {shared}" if shared else ""
+    if not shop:
+        primary = FINISH_DEFAULT if any("PRIME" in t for t in terms) else (terms[0] if terms else "")
+        return {"finish_interior": primary, "finish_edges": primary, "finish_exterior": primary}
+
+    pf = [e for e in shop if re.match(r"(?i)^PF\d", e["code"]) or re.search(r"(?i)\bprefin", e["description"])]
+    rest = [e for e in shop if e not in pf]
+    primed = any(PRIMER_WORDS.search(e["description"]) for e in rest)
+    outside, samples = [], []
+    for e in rest:
+        if BY_OTHERS.search(e["description"]):
+            final = re.sub(r"\s*\b(FIELD PAINTED )?BY OTHERS\b", "", e["description"].upper()).strip(" ,-")
+            outside.append(f"{FINISH_DEFAULT} - FINAL PAINT {final} ({e['code']}) BY OTHERS")
+            primed = True
+        else:
+            outside.append(_finish_text(e))
+            if not PRIMER_WORDS.search(e["description"]):
+                samples.append(_finish_text(e))
+    outside = list(dict.fromkeys(outside)) or [_finish_text(e) for e in pf]
+    exterior = " / ".join(outside)
+    interior = " / ".join(_finish_text(e) for e in pf) if pf else exterior
+    return {
+        "finish_interior": interior + note,
+        "finish_edges": exterior + note,
+        "finish_exterior": exterior + note,
+        "finish_color_sample": (" / ".join(samples) + note) if samples else NONE_VALUE,
+        "finish_control_sample": NONE_VALUE,
+        "finish_materials": ["PRIMER - SHOP STOCK"] if primed else [],
+    }
+
+
+def _callout_finish(code, entry, text):
+    """One finish named in a finish-page callout -> sheet text."""
+    if BY_OTHERS.search(text) or (entry and BY_OTHERS.search(entry["description"])):
+        desc = entry["description"].upper() if entry and not PRIMER_WORDS.search(entry["description"]) else ""
+        desc = re.sub(r"\s*\b(FIELD PAINTED )?BY OTHERS\b", "", desc).strip(" ,-")
+        return f"{FINISH_DEFAULT} - FINAL PAINT {desc + ' ' if desc else ''}BY OTHERS ({code})"
+    if entry:
+        return _finish_text(entry)
+    return f"{FINISH_DEFAULT} ({code})" if PRIMER_WORDS.search(text) else f"SEE RECSET ({code})"
+
+
+def finishes_from_recset(entries, terms, fmap=None):
+    """Fill the finish block from the RECSET -> (fields, warnings).
+
+    The FINISHES legend says what finishes there are. The finish page, when the RECSET has one
+    (recset._finish_map), says where they go:
+      callouts       'ALL INTERIORS AND FRONT EDGES TO BE PAINTED BY SP, PT01' set those surfaces
+                     directly; drawer/door faces are added to the exterior line by name
+      colour only    a finish that shows on some views and not others (1516 Library: PT01 on the
+                     east elevation) is written with where it is, on interior and edges, with a
+                     warning, since colour alone doesn't say which surface
+    Anything the page doesn't settle keeps the legend-only rule (_finishes_from_legend).
+    """
+    warnings = []
+    entries = [dict(e) for e in entries]
+    known = {e["code"] for e in entries if e["code"]}
+    for sw in (fmap or {}).get("swatches", []):  # the key can name finishes the legend leaves out
+        if sw["code"] not in known:
+            entries.append({"code": sw["code"], "description": sw["description"]})
+            known.add(sw["code"])
+    out = _finishes_from_legend(entries, terms)
+    for e in entries:
+        if e["code"] and not NOT_SHOP.match(e["code"]) and re.search(r"(?i)\b(TBD|RFI)\b", e["description"]):
+            warnings.append(f"{e['code']} is '{e['description']}' on the RECSET: the finish isn't decided yet.")
+    if not fmap:
+        return out, warnings
+    by_code = {e["code"]: e for e in entries if e["code"]}
+    page = fmap["page"]
+
+    surf = {"interior": [], "edges": [], "exterior": [], "faces": []}
+    for c in fmap["callouts"]:
+        if not c["surfaces"]:
+            continue
+        for code in c["codes"]:
+            if NOT_SHOP.match(code):
+                continue
+            e = by_code.get(code)
+            if not e:
+                warn = (f"RECSET finish page (p.{page}): a callout names {code}, which isn't in the "
+                                f"FINISHES legend ('{c['text']}'). Check the drawing.")
+                if warn not in warnings:
+                    warnings.append(warn)
+            text = _callout_finish(code, e, c["text"])
+            for sname in c["surfaces"]:
+                if sname == "faces":
+                    which = "DRAWER FACES" if re.search(r"(?i)drawer", c["text"]) else "DOOR FACES"
+                    surf["faces"].append(f"{which}: {text}")
+                else:
+                    surf[sname].append(text)
+    if any(surf.values()):
+        for sname in ("interior", "edges", "exterior"):
+            if surf[sname]:
+                out[f"finish_{sname}"] = " / ".join(dict.fromkeys(surf[sname]))
+        if surf["faces"]:
+            out["finish_exterior"] += "; " + "; ".join(dict.fromkeys(surf["faces"]))
+        if not out["finish_materials"] and any(
+                PRIMER_WORDS.search(out[f"finish_{k}"]) for k in ("interior", "edges", "exterior")):
+            out["finish_materials"] = ["PRIMER - SHOP STOCK"]
+        return out, warnings
+
+    all_views = set(fmap.get("all_views") or [])
+    partial = {code: views for code, views in (fmap.get("views") or {}).items()
+               if code in by_code and not NOT_SHOP.match(code) and set(views) < all_views}
+    if not partial:
+        return out, warnings
+    rest = [e for e in entries if e["code"] and e["code"] not in partial and not NOT_SHOP.match(e["code"])]
+    rest_text = " / ".join(_finish_text(e) for e in rest) or out["finish_exterior"]
+    spots = "; ".join(f"{_finish_text(by_code[c])} AT {' + '.join(v)}" for c, v in partial.items())
+    out["finish_interior"] = out["finish_edges"] = f"{spots}; ELSEWHERE {rest_text}"
+    out["finish_exterior"] = rest_text
+    for c, v in partial.items():
+        warnings.append(f"RECSET finish page (p.{page}) shows {c} on the {' and '.join(v)} only and doesn't say "
+                        f"which surfaces. The sheet puts it on interior and edges; check it.")
+    return out, warnings
+
+
 def intake_from_recset(path, drafter_names=None):
     """Pre-fill the intake from a RECSET shop drawing.
 
@@ -644,8 +796,10 @@ def intake_from_recset(path, drafter_names=None):
                              _hardware_compact(hardware_rows))
     warnings += w
 
-    finishes = data["finish_terms"]
-    primary = FINISH_DEFAULT if "PRIMED" in finishes else (finishes[0] if finishes else "")
+    fin, w = finishes_from_recset(data.get("finish_entries") or [], data["finish_terms"], data.get("finish_map"))
+    warnings += w
+    if not data.get("finish_entries") and not data.get("finish_map"):
+        warnings.append("No FINISHES legend on the RECSET: finishes guessed from callouts. Check them.")
 
     return {
         "drawn_by": drawn_by,
@@ -657,9 +811,7 @@ def intake_from_recset(path, drafter_names=None):
         # lumber, so it can be surfaced for review before the file goes out.
         "cnc_blanks": NO_BLANKS,
         "cnc_tools": [NO_TOOLS],
-        "finish_interior": primary,
-        "finish_edges": primary,
-        "finish_exterior": primary,
+        **fin,
         "_needs_blank_sizes": lumber,
         "_warnings": warnings,
         "_source": os.path.basename(path),
