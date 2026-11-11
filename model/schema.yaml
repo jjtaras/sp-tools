@@ -64,6 +64,26 @@ assumptions:
   lookback.created_from:           { type: date,   used_by: [margin-board], description: "Closed jobs created before this are left out" }
   lookback.exclude:                { type: list<string>, used_by: [margin-board], description: "Closed jobs left out (e.g. done before POs were entered in Innergy)" }
 
+  # ---- rule thresholds (shared by each board's code and its page)
+  outlook.progress_weights:        { type: map<share>, used_by: [margin-board], description: "How much of a job drafting and the shop each count for in % done (drafting + shop = 1)" }
+  outlook.unordered_until_shop_progress: { type: share, used_by: [margin-board], description: "Until this shop progress, the low end of the range allows for materials not yet ordered" }
+  flags.burn_high:                 { type: share,  used_by: [margin-board], description: "High flag when budget used runs this far ahead of progress (share points)" }
+  flags.burn_medium:               { type: share,  used_by: [margin-board], description: "Medium flag when budget used runs this far ahead of progress (share points)" }
+  flags.cash_ahead:                { type: share,  used_by: [margin-board], description: "Medium flag when spent share runs this far ahead of invoiced share" }
+  flags.planned_stale_ratio:       { type: number, used_by: [margin-board], description: "Innergy planned hours are stale when hours logged exceed planned by this factor" }
+  board.planned_highlight_min_hours: { type: number, used_by: [margin-board], description: "Work-order actuals over planned are highlighted only past this many hours" }
+  billing.co_gap_share:            { type: share,  used_by: [margin-board], description: "Billing vs Innergy value gap flagged when also over this share of the value" }
+  receiving.min_po:                { type: number, unit: "$", used_by: [margin-board], description: "Receiving-error check only applies to PO lines at least this large" }
+  receiving.error_ratio:           { type: number, used_by: [margin-board], description: "A line received at more than this multiple of its PO amount ..." }
+  receiving.error_min_gap:         { type: number, unit: "$", used_by: [margin-board], description: "... and more than this many dollars off is a receiving error; the PO amount is used" }
+  lookback.small_job_max:          { type: number, unit: "$", used_by: [margin-board], description: "Lookback 'small job' means contract under this" }
+  schedule.at_risk_shop_days:      { type: number, used_by: [production-tracker], description: "At risk: this many shop days or fewer to staged and not yet in Fab" }
+  schedule.watch_shop_days:        { type: number, used_by: [production-tracker], description: "Watch: this many shop days or fewer to staged and not yet in Fab" }
+  schedule.due_soon_shop_days:     { type: number, used_by: [production-tracker], description: "'Due staged in the next N shop days' count" }
+  shop.capacity_warn_share:        { type: share,  used_by: [production-tracker], description: "Weekly load is flagged at this share of capacity" }
+  shop.phase_shares:               { type: map<number>, used_by: [production-tracker], description: "Share of a WO's labor hours by phase (drafting, cnc, fab, finishing), for the labor-burn bands" }
+  fixes.zero_price_min_cost:       { type: number, unit: "$", used_by: [production-tracker], description: "Fix list: a $0-price WO is listed once its actual cost passes this" }
+
 job_fixes:
   billing_match:          { type: "map<string>", used_by: [margin-board], description: "Billing project name → Innergy project number, when the automatic match is wrong" }
   job_notes:              { type: "map<string>", used_by: [margin-board], description: "Innergy project number → note shown on the board" }

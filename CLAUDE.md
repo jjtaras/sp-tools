@@ -30,9 +30,9 @@ dist/                    # build output (gitignored)
 CHANGELOG.md             # engine changes
 ```
 
-Each board is assembled from `core/`, `apps/<app>/src/`, and SP's files in `sp-tools-config/apps/<app>/` (settings and, until step 3, the page). `npm test` runs that same assembly, so what's tested is what deploys.
+Each board is assembled from `core/`, `apps/<app>/src/` (code + page), and one generated file, `assumptions.js`, built from SP's `sp-tools-config/assumptions.yaml` (checked against `model/schema.yaml`). Neither code nor pages contain SP numbers. `npm test` runs that same assembly, so what's tested is what deploys.
 
-Commands: `npm test` · `npm run build` · `npm run fixture:record` then `npm run fixture:freeze -- <name>`.
+Commands: `npm test` · `npm run build` · `npm run fixture:record` then `npm run fixture:freeze -- <name>` · `npm run fixture:accept -- <name> [--yes]` for an intended output change · `node scripts/page-check.mjs <snapshot> <out-dir>` to render both pages for comparison.
 
 ## Rules
 
@@ -58,7 +58,7 @@ Jeffrey works on this from the Mac (home) and the Windows 11 PC (work). GitHub i
 0. ~~Set up the repo: `git init`, `.gitignore`, `.gitattributes`, `.nvmrc`, then the first commit and push to GitHub.~~ Done 2026-11-10 (remote uses HTTPS).
 1. ~~`clasp clone` both existing Apps Script projects, baseline with no changes.~~ Done 2026-11-10, **but the baseline went to `sp-tools-config/baseline/` on Drive, not into `apps/`.** Both projects hardcode SP values (rates, job numbers, WO values, Billing Sheet ID, client names), so committing them as-is would break the ownership split. App code enters `apps/` only once those values are split out. See the SP config CHANGELOG for file hashes.
 2. ~~Pull the duplicated logic out of both into `core/`, without changing any outputs.~~ Done 2026-11-10. Fixture harness built and verified against the live Margin Board; both boards' server code in `apps/`, SP values in `sp-tools-config/apps/`; shared Innergy-amount, duration and labor-cost math in `core/`. The two boards still count labor differently (timesheets vs WO job costing, different drafting/overhead rules); unifying that is a step 3 decision.
-3. Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml` (seed values below). Fixtures must still pass. (`sp-tools-config/` itself was created 2026-11-10.)
+3. ~~Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml`.~~ Done 2026-11-10. Owner decisions applied and logged in the SP config CHANGELOG: boards share rules (tracker now counts labor from timesheets with the Margin Board's rules), seconds dropped, crew 21, no numbers in pages. Open: Innergy planned hours still cap the tracker's post-fab forecast (seed notes say ignore them); finisher headcount / sprayer efficiency.
 4. Set up the build plus deploy script, and redeploy both boards from the repo.
 
 ## SP config location (decided Nov 2026)

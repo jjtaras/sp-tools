@@ -25,13 +25,19 @@ var DATA_FILE = 'SP Production Tracker data.json';
 function doGet() {
   var html = HtmlService.createHtmlOutputFromFile('Index').getContent();
   var data = loadData_();
-  if (!data) data = JSON.stringify({ empty: true });
+  data = JSON.stringify(pageData_(data ? JSON.parse(data) : { empty: true }));
   var safe = data.replace(/<\//g, '<\\/');
   // Google strips JS comments from served HTML, so the data goes in a JSON script tag, not a comment marker.
   html = html.replace('__TRACKER_DATA__', function () { return safe; });  // function form: no $-pattern substitution
   return HtmlService.createHtmlOutput(html)
     .setTitle('Shop Production Tracker')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** What the page gets on top of the saved data: SP's assumptions (the same file the build bundled). */
+function pageData_(data) {
+  data.assumptions = ASSUMPTIONS;
+  return data;
 }
 
 /** Run from the editor to check what the web page will get. */

@@ -35,7 +35,14 @@ function getData() {
     if (!data.meta.refreshed_at || e.at > data.meta.refreshed_at) data.meta.last_refresh_error = e;
   }
   data.meta.trigger_installed = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'refreshData'; });
-  return JSON.stringify(data);
+  return JSON.stringify(pageData_(data));
+}
+
+/** What the page gets on top of the saved data: SP's assumptions and the labels that name the margin target. */
+function pageData_(data) {
+  data.assumptions = ASSUMPTIONS;
+  data.labels = {hit: label_('hit'), under: label_('under'), missing: label_('missing')};
+  return data;
 }
 
 /** Called by the page's Refresh button. */
@@ -294,8 +301,8 @@ function buildBoard(raw, asOf) {
     var name = x.PreferredProjectName && x.PreferredProjectName.DisplayName;
     if (!name) return;
     var a = get(name), e = val(x.ExpectedTotal), r = val(x.ReceivedTotalCost), cost;
-    // Receiving error guard: received at more than 3x a real PO amount, and over $5k off.
-    if (r > 0 && e >= 100 && r > 3 * e && r - e > 5000) {
+    // Receiving error guard: received at well over a real PO amount (see the receiving.* assumptions).
+    if (r > 0 && e >= C.RECEIVING_MIN_PO && r > C.RECEIVING_ERROR_RATIO * e && r - e > C.RECEIVING_ERROR_MIN_GAP) {
       a.poFixed.push(x.PurchaseOrderSequenceIdentifier.DisplayName + ' received at $' + Math.round(r).toLocaleString('en-US') + ' vs ordered $' + Math.round(e).toLocaleString('en-US'));
       a.poRec += e; cost = e;
     } else if (r > 0) { a.poRec += r; cost = r; }
@@ -418,6 +425,7 @@ function buildBoard(raw, asOf) {
     meta: {as_of: asOf, unassigned_hours: Math.round(unassigned), jobs_checked: board.length + lookback.length, timesheet_entries: raw.timesheets.length, po_lines: raw.poLines.length, work_orders: raw.workOrders.length, projects: raw.projects.length},
     jobs: board.map(strip), outlook: outlook, flags: flags, summary: summary,
     lookback: lbRows, lookback_metrics: lbMetrics, lookback_summary: lbSummary,
+    lookback_excluded: raw.projects.filter(function (p) { return lbExclude[p.Number]; }).map(function (p) { return {job: p.Number, name: p.Name}; }),
     weekly: weekly, departments: depts, work_orders: wos, health: health, billing_check: billingCheck, billing_paid_mismatch: billingPaidMismatch,
   };
 }
@@ -452,7 +460,7 @@ function lookbackSummary(lookback, metrics) {
   var m = {}; metrics.forEach(function (r) { m[r.job] = r; });
   var hit = metrics.filter(function (r) { return r.outcome === label_('hit'); });
   var lost = metrics.filter(function (r) { return r.outcome === 'Lost money'; });
-  var small = lookback.filter(function (j) { return +j.contract < 100000; });
+  var small = lookback.filter(function (j) { return +j.contract < CONFIG.SMALL_JOB_MAX; });
   var hitMaxHalf = Math.max.apply(null, hit.map(function (r) { return r.cost_at_half_schedule; }));
   return {
     jobs: lookback.length, hit: hit.length, lost: lost.length,
@@ -473,14 +481,14 @@ function outlookFor(j, lb) {
   var row = {job: j.job, cost_to_date: Math.round(cost), cost_pct: c > 0 ? cost / c : null,
     hours_per_1k: c > 0 ? (+j.drafting_hours + +j.shop_hours) / c * 1000 : null,
     schedule_elapsed: start && end && end > start ? Math.max(0, (now - start) / (end - start)) : null,
-    progress: 0.2 * dp + 0.8 * sp,
+    progress: C.PROGRESS_WEIGHTS.drafting * dp + C.PROGRESS_WEIGHTS.shop * sp,
     invoiced_pct: !(c > 0) ? null : j.billed_paid !== null ? (j.billed_paid + (j.billed_open || 0)) / c : j.billing_status.indexOf('fully billed') === 0 ? 1 : null,
     expected_margin: null, low_margin: null, high_margin: null, projected_cost: null, verdict: ''};
   if (!(c > 0)) { row.verdict = 'No job value'; return row; }
   if (cost === 0) { row.verdict = 'Not started'; return row; }
   if (sp < C.MIN_SHOP_PROGRESS) { row.verdict = cost / c > lb.hit_max_cost_at_half ? 'Early warning' : 'Too early to call'; return row; }
   var dEac = dp >= 0.25 ? d / dp : d, sEac = s / sp, remaining = sEac - s, exp = po + dEac + sEac;
-  var pess = exp + C.RANGE_SWING * remaining + (sp < 0.8 ? C.UNORDERED_MATERIALS * c : 0);
+  var pess = exp + C.RANGE_SWING * remaining + (sp < C.UNORDERED_UNTIL ? C.UNORDERED_MATERIALS * c : 0);
   var opt = exp - C.RANGE_SWING * remaining;
   row.projected_cost = Math.round(exp);
   row.expected_margin = base - exp / c;
@@ -503,17 +511,17 @@ function flagsFor(jobs, outlook, lb) {
     if (r.cost_to_date === 0) return;
     var line = CONFIG.COST_LINE, budgetUsed = r.cost_pct / line, prog = r.progress;
     if (r.cost_pct > line) add(j.job, 'overline', 'high', 'Past the ' + p(line) + ' cost line', 'Spent ' + p(r.cost_pct) + ' of the job value');
-    else if (budgetUsed - prog > 0.2) add(j.job, 'burn', 'high', 'Spending well ahead of progress', p(budgetUsed) + ' of the cost budget used at about ' + p(prog) + ' complete');
-    else if (budgetUsed - prog > 0.1) add(j.job, 'burn', 'medium', 'Spending ahead of progress', p(budgetUsed) + ' of the cost budget used at about ' + p(prog) + ' complete');
+    else if (budgetUsed - prog > CONFIG.FLAG_BURN_HIGH) add(j.job, 'burn', 'high', 'Spending well ahead of progress', p(budgetUsed) + ' of the cost budget used at about ' + p(prog) + ' complete');
+    else if (budgetUsed - prog > CONFIG.FLAG_BURN_MEDIUM) add(j.job, 'burn', 'medium', 'Spending ahead of progress', p(budgetUsed) + ' of the cost budget used at about ' + p(prog) + ' complete');
     // Job value: billing sheet against Innergy. A gap is usually change orders that never made it into Innergy.
-    if (j.contract_source === 'billing sheet' && Math.abs(c - j.innergy_value) > Math.max(CONFIG.CO_GAP_MIN, 0.02 * c))
+    if (j.contract_source === 'billing sheet' && Math.abs(c - j.innergy_value) > Math.max(CONFIG.CO_GAP_MIN, CONFIG.CO_GAP_SHARE * c))
       add(j.job, 'cogap', 'medium', c > j.innergy_value ? 'Billing value above Innergy' : 'Billing value below Innergy',
         'Billing sheet ' + usd(c) + ' vs Innergy ' + usd(j.innergy_value) + (c > j.innergy_value ? '. Likely change orders not entered in Innergy' : '. Check which is right'));
     // Cash: what's been spent against what's been invoiced (paid + open).
     if (j.billed_paid !== null) {
       var invoiced = j.billed_paid + (j.billed_open || 0);
       if (r.cost_to_date > invoiced) add(j.job, 'cash', 'high', 'Spent more than invoiced', 'Spent ' + usd(r.cost_to_date) + ', invoiced ' + usd(invoiced) + '. SP is out of pocket ' + usd(r.cost_to_date - invoiced));
-      else if (r.cost_pct - invoiced / c > 0.15) add(j.job, 'cash', 'medium', 'Spending ahead of billing', 'Spent ' + p(r.cost_pct) + ' of the job value, invoiced ' + p(invoiced / c));
+      else if (r.cost_pct - invoiced / c > CONFIG.FLAG_CASH_AHEAD) add(j.job, 'cash', 'medium', 'Spending ahead of billing', 'Spent ' + p(r.cost_pct) + ' of the job value, invoiced ' + p(invoiced / c));
       if ((j.billed_open || 0) > 0) add(j.job, 'unpaid', 'low', 'Invoiced, not yet paid', usd(j.billed_open) + ' open or overdue');
     }
     if (r.schedule_elapsed !== null && r.schedule_elapsed <= 0.5 && r.cost_pct > lb.hit_max_cost_at_half)
@@ -526,7 +534,7 @@ function flagsFor(jobs, outlook, lb) {
     if (+j.po_open > 0) add(j.job, 'po', 'low', 'Open PO commitments', usd(+j.po_open) + ' ordered, not yet received (included in cost)');
     if (+j.unapproved_hours > 0) add(j.job, 'pending', 'low', 'Unapproved hours', Math.round(+j.unapproved_hours) + ' hrs not yet approved (included in cost)');
     var hrs = +j.drafting_hours + +j.shop_hours;
-    if (+j.innergy_planned_hours > 0 && hrs > 1.5 * +j.innergy_planned_hours) add(j.job, 'planned', 'low', 'Innergy planned hours are stale', Math.round(hrs).toLocaleString('en-US') + ' hrs logged vs ' + Math.round(+j.innergy_planned_hours).toLocaleString('en-US') + ' planned');
+    if (+j.innergy_planned_hours > 0 && hrs > CONFIG.PLANNED_STALE_RATIO * +j.innergy_planned_hours) add(j.job, 'planned', 'low', 'Innergy planned hours are stale', Math.round(hrs).toLocaleString('en-US') + ' hrs logged vs ' + Math.round(+j.innergy_planned_hours).toLocaleString('en-US') + ' planned');
     if (+j.drafting_hours === 0 && !j.drafting_note && +j.drafting_progress >= 0.5) add(j.job, 'nodraft', 'low', 'No drafting hours logged', 'Drafting time is probably landing on another job or overhead');
   });
   return out;

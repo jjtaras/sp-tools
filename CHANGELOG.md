@@ -4,10 +4,19 @@ Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGE
 
 ## Unreleased
 
+### Step 3: one assumptions file, shared rules, no numbers in pages
+- `model/schema.yaml` + `lib/assumptions.mjs`: SP's `assumptions.yaml` is validated (types, required value/since/source, cross-checks) and bundled into every board as `ASSUMPTIONS`. Both boards' only SP input is that file.
+- Rule thresholds that were literals in code or pages are now assumptions (flags, outlook, receiving guard, lookback, schedule, capacity warning, phase shares).
+- `core/labor.mjs`: `laborRules` / `classifyLabor`, the shared labor rules. Both boards count labor from timesheets with them.
+- `core/innergy.mjs`: one duration reading (seconds dropped), `monthsThrough`.
+- Both pages are in `apps/<app>/src/Index.html` and fill every number from the served assumptions. `pageData_` on each board serves them.
+- `scripts/accept-change.mjs` (`npm run fixture:accept`) shows an intended output change and, with `--yes`, re-freezes it.
+- `scripts/page-check.mjs` renders both pages in headless Chrome with a snapshot's data (frozen clock, all tabs and a job opened) and saves the text and DOM, so page changes can be compared.
+
 ### Added
 - **`core/` engine** (step 2), bundled into each board as the global `SPCore`:
   - `amount`: Innergy money fields.
-  - `durationHours`: Innergy durations. It keeps both boards' readings: the Margin Board counts seconds, and the tracker ignores them (`wholeMinutes`). Unifying them is an assumption decision.
+  - `durationHours`: Innergy durations. It first kept both boards' readings. Since step 3 there's one reading, seconds dropped.
   - `laborRate` and `laborCost`: burdened hours to dollars, with rates passed in from config.
 - **Both boards' server code is in `apps/<app>/src/`.** SP values are out of it: settings, examples with job and client names, and the domain. "Hit 16%" and similar labels are built from the configured margin target. `apps/<app>/app.json` lists what makes up each board.
 - **`lib/assemble.mjs` and `npm run build`** put each board together from `core/`, its repo code, and SP's files in `sp-tools-config/apps/<app>/` (settings and, until step 3, the page). The build writes `dist/<app>/`, plus `BUILD.json` with the commit and a config hash. The fixture tests run the same assembly, so what's tested is what gets deployed.

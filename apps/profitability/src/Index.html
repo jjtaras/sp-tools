@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>SP Job Margin Board</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root {
+  --bg: #f7f6f3; --panel: #ffffff; --fg: #1f1e1b; --muted: #6b6862; --line: #e3e0d9; --hover: #f1efea;
+  --ok: #2f7d4f; --warn: #b26a00; --bad: #c0392b; --accent: #2c5d8f; --accent2: #8a5a9e;
+  --grid: #ece9e3; --axis: #c9c5bc; --ref: #9b968c; --muted-mark: #b8b3a9;
+  --shadow: 0 4px 16px rgba(0,0,0,.08); --radius: 8px;
+  --sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161513; --panel: #201f1c; --fg: #ecebe7; --muted: #a29e95; --line: #34322d; --hover: #2a2925;
+    --ok: #5cb27e; --warn: #e0a03a; --bad: #e5675a; --accent: #6fa3d6; --accent2: #b88ccc;
+    --grid: #2d2b27; --axis: #4a4741; --ref: #77736a; --muted-mark: #5d5a53; --shadow: 0 4px 16px rgba(0,0,0,.4); }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-family: var(--serif); font-weight: 400; font-size: 28px; margin: 0 0 6px; }
+.take { margin: 0 0 6px; max-width: 62rem; font-size: 15px; }
+.note { font-size: 12px; color: var(--muted); margin: 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.note button, .btn { font: inherit; font-size: 12px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.note button:disabled { opacity: .5; cursor: default; }
+.warnbar { margin-top: 10px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--warn); color: var(--warn); font-size: 13px; }
+.warnbar[hidden] { display: none; }
+.tabs { display: flex; gap: 4px; margin: 20px 0 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tab { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--muted); cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+.page[hidden] { display: none; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 8px; margin-bottom: 14px; }
+.chip { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.chip[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: -2px; }
+.chip .n { font-family: var(--serif); font-size: 26px; line-height: 1.1; display: block; font-variant-numeric: tabular-nums; }
+.chip .l { font-size: 12px; color: var(--muted); }
+.chip .m { font-size: 12px; color: var(--muted); display: block; font-variant-numeric: tabular-nums; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card h2, .card h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.cnote { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 12px; margin-top: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.tile .lab { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+.big { font-family: var(--serif); font-size: 26px; line-height: 1.15; display: block; font-variant-numeric: tabular-nums; }
+.sub { font-size: 12px; color: var(--muted); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.scroll { overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--panel); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.num { text-align: right; white-space: nowrap; }
+#board tbody tr { cursor: pointer; }
+#board tbody tr:hover td, #board tbody tr.sel td { background: var(--hover); }
+.bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.bar .toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--fg); }
+.bar .toggle[hidden] { display: none; }
+.callout { margin: 0 0 14px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel); font-size: 13px; }
+.callout[hidden] { display: none; }
+.callout button { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.bar select { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.jobname { font-weight: 600; }
+.meta { font-size: 12px; color: var(--muted); }
+.prog { width: 4.5rem; height: 6px; border-radius: 3px; background: var(--grid); position: relative; }
+.prog > div { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--muted-mark); }
+.range { position: relative; height: 22px; min-width: 12rem; }
+.range .zone { position: absolute; top: 9px; height: 4px; opacity: .2; }
+.range .tick { position: absolute; top: 2px; bottom: 2px; border-left: 1px dashed var(--ref); }
+.range .band { position: absolute; top: 6px; height: 10px; border-radius: 5px; opacity: .35; }
+.range .dot { position: absolute; top: 5px; width: 12px; height: 12px; border-radius: 50%; margin-left: -6px; border: 2px solid var(--panel); }
+.range .clip { position: absolute; top: 2px; left: 0; font-size: 11px; color: var(--bad); }
+.range .txt { position: absolute; left: 0; top: 2px; font-size: 12px; color: var(--muted); background: var(--panel); padding-right: 6px; }
+.spend { position: relative; height: 14px; min-width: 11rem; background: var(--grid); border-radius: 4px; }
+.spend .f { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.spend .line { position: absolute; top: -4px; bottom: -4px; border-left: 2px solid var(--warn); }
+.spend .line.be { border-left: 2px dashed var(--bad); }
+.spend .done { position: absolute; top: -5px; width: 0; height: 24px; border-left: 2px solid var(--fg); }
+.spend .done::after { content: ""; position: absolute; top: -5px; left: -5px; border: 4px solid transparent; border-top-color: var(--fg); }
+.spend .over { position: absolute; right: -14px; top: -2px; font-size: 11px; color: var(--bad); }
+.spendtxt { font-size: 12px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.keyrow { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 10px 0 0; align-items: center; }
+.keyrow i { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.scalehead { position: relative; height: 16px; min-width: 12rem; font-size: 11px; color: var(--muted); font-weight: 400; }
+.scalehead span { position: absolute; transform: translateX(-50%); }
+.verdict { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+.why { font-size: 12px; color: var(--muted); max-width: 22rem; }
+.pill { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 6px; border: 1px solid currentColor; }
+.c-bad { color: var(--bad); } .c-warn { color: var(--warn); } .c-ok { color: var(--ok); } .c-muted { color: var(--muted); }
+#detail[hidden] { display: none; }
+#detail { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+#detail h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 0; }
+#detail .dsub { margin: 4px 0 12px; font-size: 12px; color: var(--muted); }
+.close { float: right; }
+details.more { margin-top: 12px; }
+details.more summary { cursor: pointer; font-weight: 600; }
+.chart { position: relative; min-height: 280px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); padding: 4px 8px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; z-index: 2; }
+.tip .d { color: var(--muted); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span::before { content: ""; display: inline-block; width: 14px; border-top: 2px solid var(--sw); margin-right: 6px; vertical-align: middle; }
+.legend span.dash::before { border-top-style: dashed; }
+.bars { display: grid; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.barrow { display: grid; grid-template-columns: 7rem 1fr 4.5rem; gap: 8px; align-items: center; }
+.track { height: 12px; } .fill { height: 100%; border-radius: 4px; }
+.hbar { position: relative; height: 14px; min-width: 8rem; }
+.hbar .f { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.hbar .ref { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--ref); }
+.method { max-width: 52rem; line-height: 1.55; font-size: 14px; }
+.method h3 { margin: 18px 0 4px; font-size: 15px; }
+.method p, .method li { margin: 0 0 8px; }
+.loading { padding: 60px 0; text-align: center; color: var(--muted); }
+@media (max-width: 760px) { .hide-narrow { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SP job margin board</h1>
+  <p class="take" id="takeaway">Loading the latest numbers from Innergy…</p>
+  <p class="note"><span id="stamp"></span><button id="refresh" title="Pull fresh data from Innergy now (takes about a minute)">Refresh from Innergy</button></p>
+  <div class="warnbar" id="warn" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-tab="active" aria-selected="true" id="tab-active">Active jobs</button>
+    <button class="tab" data-tab="billed" aria-selected="false" id="tab-billed">Fully billed</button>
+    <button class="tab" data-tab="history" aria-selected="false" id="lb-tabname">Closed jobs</button>
+    <button class="tab" data-tab="method" aria-selected="false">How it's calculated</button>
+  </nav>
+
+  <section id="board-tab" class="page">
+    <div class="strip" id="strip"></div>
+    <p class="callout" id="billed-callout" hidden></p>
+    <div class="card">
+      <div class="bar"><label>PM <select id="pm-filter"><option value="">All PMs</option></select></label>
+        <label class="toggle" id="billed-toggle-wrap"><input type="checkbox" id="billed-toggle"> <span id="billed-toggle-label">Include fully billed jobs</span></label>
+        <span id="filter-note"></span></div>
+      <div class="scroll">
+        <table id="board">
+          <thead><tr>
+            <th>Job</th><th>Spent of job value</th><th class="num hide-narrow">Invoiced</th>
+            <th class="num">Projected margin</th><th>Outlook</th><th class="hide-narrow">Why</th>
+          </tr></thead>
+          <tbody><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="keyrow">
+        <span><i style="width:18px;height:8px;border-radius:3px;background:var(--accent)"></i>Labor + POs spent, as a share of the job value</span>
+        <span><i style="height:14px;border-left:2px solid var(--warn)"></i><span data-a="cost.cogs_share" data-f="pct"></span> cost line</span>
+        <span><i style="height:14px;border-left:2px dashed var(--bad)"></i><span data-a="=breakeven" data-f="pct"></span> break-even</span>
+        <span><i style="height:14px;border-left:2px solid var(--fg)"></i>What it should have spent for the work done (<span data-a="cost.cogs_share" data-f="pct"></span> × % done)</span>
+      </div>
+      <p class="cnote" style="margin:6px 0 0">When the fill runs past the black marker, the job is over budget for how far along it is. Projected margin assumes the work keeps its current pace. Click a job for detail.</p>
+    </div>
+
+    <div id="detail" hidden>
+      <button class="btn close" id="detail-close">Close</button>
+      <h2 id="d-title"></h2>
+      <p class="dsub" id="d-sub"></p>
+      <div class="kpis">
+        <div class="tile"><p class="lab">Outlook</p><span class="big" id="d-verdict"></span><p class="sub" id="d-range"></p></div>
+        <div class="tile"><p class="lab">Spent of job value</p><span class="big" id="d-pct"></span><p class="sub" id="d-cost"></p></div>
+        <div class="tile"><p class="lab">Invoiced</p><span class="big" id="d-inv"></span><p class="sub" id="d-inv-sub"></p></div>
+        <div class="tile"><p class="lab">Work done</p><span class="big" id="d-prog"></span><p class="sub" id="d-wo"></p></div>
+        <div class="tile"><p class="lab">Job hours per $1k of value</p><span class="big" id="d-hrs"></span><p class="sub" id="d-hrs-sub"></p></div>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Cumulative cost against the job value</h3><p class="cnote">Weekly job labor plus POs. Crossing the <span data-a="cost.cogs_share" data-f="pct"></span> line means the job is eating into overhead and profit.</p><div class="chart" id="cost-chart"></div><div class="legend" id="cost-legend"></div></div>
+        <div class="card"><h3>Flags</h3><p class="cnote">High = margin at risk now. Medium = worth a look this week. Low = data quality.</p>
+          <div class="scroll" style="max-height:24rem"><table id="flags-table"><thead><tr><th>Level</th><th>Flag</th><th>Detail</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+      <details class="more" id="more"><summary>Hours by department and work orders</summary>
+        <div class="grid">
+          <div class="card"><h3>Hours by department</h3><p class="cnote">Job hours only; PM, admin and foreman time excluded.</p><div class="bars" id="dept-bars"></div></div>
+          <div class="card"><h3>Work orders</h3><p class="cnote">Innergy's planned hours next to actuals.</p>
+            <div class="scroll" style="max-height:24rem"><table id="wo-table"><thead><tr><th>WO</th><th>Name</th><th>Stage</th><th class="num">Price</th><th class="num">Planned h</th><th class="num">Actual h</th></tr></thead><tbody></tbody></table></div></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section id="history" class="page" hidden>
+    <p class="take" id="lb-take"></p>
+    <div class="kpis" id="lb-kpis"></div>
+    <div class="grid">
+      <div class="card"><h3>How cost built up over each job</h3><p class="cnote">Each line is one job. Across: share of the job's timeline, first to last cost. Up: cumulative cost ÷ contract. Dashed lines at <span data-a="cost.cogs_share" data-f="pct"></span> and <span data-a="=breakeven" data-f="pct"></span>. Hover a line for the job.</p><div class="chart" id="curves-chart"></div><div class="legend" id="curves-legend"></div></div>
+      <div class="card"><h3>Job size against final margin</h3><p class="cnote">Contract value on a log scale. Dashed lines at <span data-a="cost.margin_target" data-f="pct"></span> and break-even.</p><div class="chart" id="size-chart"></div></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2 id="lb-title">The closed jobs</h2>
+      <p class="cnote">"Cost at half schedule" is cumulative cost ÷ contract at the midpoint between first and last cost. "Work orders" in the contract column means no total contract was entered, so the work-order total stands in.</p>
+      <div class="scroll" style="max-height:40rem"><table id="lb-table"><thead><tr>
+        <th>Job</th><th>Name</th><th>PM</th><th class="num">Contract</th><th>Contract from</th><th class="num">Labor</th><th class="num">POs</th>
+        <th class="num">Hours per $1k</th><th class="num">PM &amp; overhead hrs</th><th class="num">Weeks</th><th class="num">Cost at half schedule</th><th class="num">Cost ÷ contract</th><th style="min-width:9rem"></th><th class="num">Margin</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="method" class="page" hidden>
+    <div class="card method">
+      <h2>How the numbers work</h2>
+      <h3>Where the data comes from</h3>
+      <p>Every hour, this page pulls timesheets, purchase orders, work orders and projects from Innergy, and job values and billing from the SP Billing Dashboard. The Refresh button pulls both on demand. Nothing is typed in by hand.</p>
+      <h3>Job value</h3>
+      <p>The billing dashboard is the source of truth. Each job's value is the Total Value on its <span data-a="billing.summary_tab" data-f="text"></span> tab, which includes change orders. Jobs with no billing tab, or a blank total, fall back to Innergy's total contract (or its work-order total if no contract was entered), and the board marks them "(Innergy)."</p>
+      <p>Billing rows are matched to Innergy by the job number at the start of the name. Older jobs carry a leading 1 on the billing sheet (1123) that Innergy doesn't (123); that match is only used when there's no exact one. The Data check below lists every match.</p>
+      <h3>Spent</h3>
+      <p>Spent is cost of goods to date: job labor plus purchase orders. Labor is every timesheet hour booked to the job, at <span data-a="labor.rate_drafting" data-f="usd"></span>/hr for drafting and <span data-a="labor.rate_other" data-f="usd"></span>/hr for everyone else, including unapproved hours. PM, coordination, supervision, foreman, management and admin time is overhead and never counts against the job. POs count at their received cost once received, or the PO amount while open; canceled lines are dropped. A line received at more than <span data-a="receiving.error_ratio" data-f="word"></span> times its PO amount, and over <span data-a="receiving.error_min_gap" data-f="usdk"></span> off, is treated as a receiving error and the PO amount is used.</p>
+      <h3>The <span data-a="cost.cogs_share" data-f="pts"></span>/<span data-a="=non_cogs" data-f="pts"></span> split</h3>
+      <p>Cost of goods should stay at or under <span data-a="cost.cogs_share" data-f="pct"></span> of the job value. The other <span data-a="=non_cogs" data-f="pct"></span> covers overhead (<span data-a="cost.overhead_share" data-f="pct"></span>) and profit (<span data-a="cost.margin_target" data-f="pct"></span>). So margin = <span data-a="=breakeven" data-f="pct"></span> − spent ÷ job value. At <span data-a="cost.cogs_share" data-f="pct"></span> spent the job makes <span data-a="cost.margin_target" data-f="pct"></span>; at <span data-a="=breakeven" data-f="pct"></span> it breaks even. Every point over <span data-a="cost.cogs_share" data-f="pct"></span> comes straight off the <span data-a="cost.margin_target" data-f="pct"></span>.</p>
+      <h3>Work done</h3>
+      <p>The black marker on each bar is what the job should have spent by now if it were on budget: <span data-a="cost.cogs_share" data-f="pct"></span> × how much of the job is done. "Done" is estimated from Innergy's work-order stages weighted by price: drafting counts for <span data-a="outlook.progress_weights.drafting" data-f="pct"></span> of the job and the shop for <span data-a="outlook.progress_weights.shop" data-f="pct"></span>. In the shop, CNC is <span data-a="progress.shop_by_step.02 - CNC" data-f="pct"></span> done, fabrication <span data-a="progress.shop_by_step.03 - Fabrication" data-f="pct"></span>, finishing <span data-a="progress.shop_by_step.04 - Finishing" data-f="pct"></span>, staging <span data-a="progress.shop_by_step.05 - Staging" data-f="pct"></span>, delivered <span data-a="progress.shop_by_step.06 - Delivered" data-f="pct"></span>. It's a rough proxy until PMs confirm % complete each week.</p>
+      <h3>Projected margin</h3>
+      <p>Drafting and shop labor are projected separately at their pace so far (cost ÷ progress); materials are what's been ordered. The likely range in the job detail assumes the remaining shop work comes in <span data-a="outlook.range_swing" data-f="pct"></span> better or worse, and, until <span data-a="outlook.unordered_until_shop_progress" data-f="pct"></span> of the shop work is done, allows <span data-a="outlook.unordered_materials" data-f="pct"></span> of the job value for materials not yet ordered. It's a judgment call, not a statistical probability.</p>
+      <h3>Outlook</h3>
+      <ul>
+        <li><b>Losing money</b>: projected margin below zero.</li>
+        <li><b>Likely misses <span data-a="cost.margin_target" data-f="pct"></span></b>: projected between zero and <span data-a="cost.margin_target" data-f="pct"></span>.</li>
+        <li><b>At risk</b>: projected at or above <span data-a="cost.margin_target" data-f="pct"></span>, but the low end of the range falls below it.</li>
+        <li><b>On track</b>: even the low end clears <span data-a="cost.margin_target" data-f="pct"></span>.</li>
+        <li><b>Early warning</b>: under <span data-a="outlook.min_shop_progress" data-f="pct"></span> through the shop, so too early to project, but already spent more of the job value than any lookback winner had by its halfway point.</li>
+        <li><b>Too early to call</b>: under <span data-a="outlook.min_shop_progress" data-f="pct"></span> through the shop with no warning signs yet.</li>
+        <li><b>No job value</b> and <b>Not started</b>: nothing to score.</li>
+      </ul>
+      <h3>Flags</h3>
+      <ul>
+        <li>High: spent past the <span data-a="cost.cogs_share" data-f="pct"></span> line; budget used <span data-a="flags.burn_high" data-f="pts"></span>+ points ahead of progress while still under the line; spent more than has been invoiced (SP is out of pocket); spending faster than any lookback winner at the same point in the schedule; job hours per $1k above the median losing job; no job value.</li>
+        <li>Medium: billing value differs from Innergy by more than <span data-a="billing.co_gap_min" data-f="usd"></span> and <span data-a="billing.co_gap_share" data-f="pct"></span> (usually change orders not entered in Innergy); spent share running <span data-a="flags.cash_ahead" data-f="pts"></span>+ points ahead of invoiced share; budget used <span data-a="flags.burn_medium" data-f="pts"></span>–<span data-a="flags.burn_high" data-f="pts"></span> points ahead of progress; job hours per $1k above anything a lookback winner used; past planned finish; still open after nearly everything shipped; a PO receiving error was corrected.</li>
+        <li>Low: invoiced but unpaid; open PO commitments; unapproved hours; Innergy planned hours stale; no drafting hours logged.</li>
+      </ul>
+      <h3>Invoiced</h3>
+      <p>Invoiced is paid plus open/overdue, as a share of the job value. Jobs that aren't on the billing sheet have been fully billed, so they show 100% (in grey). Paid comes from each job tab's own PTD, not from <span data-a="billing.summary_tab" data-f="text"></span>: on the tabs, "Adjusted PTD" adds paid change orders to a PTD that already includes them, so <span data-a="billing.summary_tab" data-f="text"></span> double-counts them. The Data check lists the jobs affected.</p>
+      <h3>Active, fully billed and closed</h3>
+      <p><b>Active jobs</b> are open in Innergy with billing still left to do. <b>Fully billed</b> jobs are open in Innergy but have nothing left to invoice: either they've dropped off the billing sheet, or their "to be invoiced" and "ready to invoice" amounts are both zero. A job with money ready to invoice stays active until that invoice goes out. Jobs with no job value stay active so they get fixed. The checkbox on the Active screen adds fully billed jobs back in; the headline and tiles always count only the jobs on screen. Fully billed jobs that logged hours in the last 14 days are called out on the Active screen, since that cost has no billing left to cover it. <b>Closed jobs</b> are closed in Innergy and make up the lookback.</p>
+      <h3>Lookback</h3>
+      <p>Closed jobs over <span data-a="lookback.min_contract" data-f="usdk"></span>, created since <span data-a="lookback.created_from" data-f="month"></span>, with both timesheets and POs in Innergy, measured against Innergy's contract values (the billing sheet only covers open jobs).<span id="lb-excluded"></span> The schedule and hours flags take their thresholds from the lookback, so they adjust as more jobs close.</p>
+      <h3>What this can't see</h3>
+      <p>Timesheet hours with no job attached (<span id="unassigned"></span> since <span data-a="innergy.timesheets_start" data-f="month"></span>). Planned ship dates move when PMs reschedule, which makes the schedule checks more forgiving than they should be.</p>
+      <h3>Data check</h3>
+      <p id="health"></p>
+      <p id="billing-paid"></p>
+      <div class="scroll"><table id="billing-check"><thead><tr><th>Billing sheet</th><th>Innergy job</th><th>Matched by</th><th class="num">Billing value</th><th class="num">Innergy value</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const money = (v) => v == null || isNaN(v) ? '—' : '$' + d3.format(',.0f')(v);
+const compact = (v) => v == null || isNaN(v) ? '—' : '$' + new Intl.NumberFormat('en', {notation: 'compact', maximumFractionDigits: 1}).format(v);
+const pct = (v) => v == null || isNaN(v) ? '—' : d3.format('.1%')(v);
+const pct0 = (v) => v == null || isNaN(v) ? '—' : d3.format('.0%')(v);
+const hrsFmt = (v) => v == null || isNaN(v) ? '—' : d3.format(',.0f')(v);
+// Every rule number comes from SP's assumptions, served with the data (D.assumptions); labels that name the
+// margin target come from the server too (D.labels), so the page always says what the code does.
+let A = null, LBL = null, LINE = null, BREAKEVEN = null, TARGET = null, VERDICTS = [], VC = {};
+function setAssumptions(a, labels) {
+  A = a; LBL = labels; LINE = a.cost.cogs_share; BREAKEVEN = 1 - a.cost.overhead_share; TARGET = a.cost.margin_target;
+  VERDICTS = ['Losing money', LBL.missing, 'At risk', 'Early warning', 'Too early to call', 'On track', 'No job value', 'Not started'];
+  VC = {'Losing money': 'var(--bad)', [LBL.missing]: 'var(--warn)', 'At risk': 'var(--warn)', 'Early warning': 'var(--warn)', 'Too early to call': 'var(--muted)', 'On track': 'var(--ok)', 'No job value': 'var(--muted)', 'Not started': 'var(--muted)'};
+  fillAssumptions();
+}
+// Fills every <span data-a="key" data-f="format"> in the page from the assumptions, as plain text.
+const NUM_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const monthName = (v, style) => { const [y, m] = String(v).split('-').map(Number); return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', {month: style, year: 'numeric', timeZone: 'UTC'}); };
+const FMT = {pct: (v) => Math.round(v * 100) + '%', pts: (v) => String(Math.round(v * 100)), usd: (v) => '$' + v.toLocaleString('en-US'),
+  usdk: (v) => '$' + v / 1000 + 'k', month: (v) => monthName(v, 'long'), mon: (v) => monthName(v, 'short'), word: (v) => NUM_WORDS[v] || String(v), text: String};
+function aValue(key) {
+  if (key === '=breakeven') return 1 - A.cost.overhead_share;
+  if (key === '=non_cogs') return 1 - A.cost.cogs_share;
+  const parts = key.split('.'); return parts.reduce((o, k) => o[k], A);
+}
+function fillAssumptions() {
+  document.querySelectorAll('span[data-a]').forEach((s) => s.replaceWith(document.createTextNode(FMT[s.dataset.f](aValue(s.dataset.a)))));
+}
+const SEV = {high: 0, medium: 1, low: 2}, SEVC = {high: 'c-bad', medium: 'c-warn', low: 'c-muted'};
+const OUTC = (o) => o === LBL.hit ? 'var(--accent)' : o === 'Lost money' ? 'var(--bad)' : 'var(--muted-mark)';
+const marginClass = (m) => m == null ? 'c-muted' : m < 0 ? 'c-bad' : m < TARGET ? 'c-warn' : 'c-ok';
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const shortJob = (n) => n.replace(/_/g, ' ');
+const shortName = (n) => n.replace(/^\d+_/, '').replace(/_/g, ' ');
+
+let D = null, selected = null, activeTab = 'active', verdictFilter = null, pmFilter = '', includeBilled = false;
+const PAGE_FOR = {active: 'board-tab', billed: 'board-tab', history: 'history', method: 'method'};
+// Fully billed: nothing left to invoice. Uses the server's flag; falls back for data saved before it existed.
+const isBilled = (job) => {
+  const j = D.byJob[job], r = D.byOutlook[job];
+  if (j.fully_billed !== undefined) return j.fully_billed;
+  return j.contract > 0 && r.invoiced_pct != null && r.invoiced_pct >= 0.999 && !(j.billed_ready > 1);
+};
+const inView = (job) => activeTab === 'billed' ? isBilled(job) : (includeBilled || !isBilled(job));
+function summarize(rows) {
+  const c = (r) => D.byJob[r.job].contract || 0;
+  const out = {jobs: rows.length, contract: d3.sum(rows, c)};
+  [['losing', 'Losing money'], ['missing', LBL.missing], ['at_risk', 'At risk'], ['early_warning', 'Early warning'],
+    ['too_early', 'Too early to call'], ['on_track', 'On track'], ['no_contract', 'No job value'], ['not_started', 'Not started']]
+    .forEach(([k, v]) => { const g = rows.filter((r) => r.verdict === v); out[k] = g.length; out[k + '_contract'] = d3.sum(g, c); });
+  return out;
+}
+
+// ------------------------------------------------------------ data
+function load(text) {
+  const d = JSON.parse(text);
+  if (d.error) { document.getElementById('takeaway').textContent = d.error; return; }
+  D = d;
+  setAssumptions(d.assumptions, d.labels);
+  D.byJob = Object.fromEntries(D.jobs.map((j) => [j.job, j]));
+  D.byOutlook = Object.fromEntries(D.outlook.map((r) => [r.job, r]));
+  D.byLb = Object.fromEntries(D.lookback_metrics.map((r) => [r.job, r]));
+  draw();
+}
+function fail(err) {
+  const w = document.getElementById('warn');
+  w.hidden = false; w.textContent = 'Refresh failed: ' + (err && err.message ? err.message : err) + '. The script editor\'s Executions page has the full error.';
+  const b = document.getElementById('refresh'); b.disabled = false; b.textContent = 'Refresh from Innergy';
+}
+document.getElementById('refresh').addEventListener('click', () => {
+  const b = document.getElementById('refresh'); b.disabled = true; b.textContent = 'Pulling from Innergy…';
+  google.script.run.withSuccessHandler((t) => { b.disabled = false; b.textContent = 'Refresh from Innergy'; load(t); }).withFailureHandler(fail).refreshNow();
+});
+
+// ------------------------------------------------------------ tabs
+document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+  if (activeTab !== t.dataset.tab) { verdictFilter = null; selected = null; }
+  activeTab = t.dataset.tab;
+  document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+  document.querySelectorAll('.page').forEach((p) => { p.hidden = p.id !== PAGE_FOR[activeTab]; });
+  draw();
+}));
+
+function draw() {
+  if (!D) return;
+  drawHeader();
+  if (activeTab === 'active' || activeTab === 'billed') { drawBoard(); drawDetail(); }
+  if (activeTab === 'history') drawHistory();
+  if (activeTab === 'method') drawMethod();
+}
+window.addEventListener('resize', () => { clearTimeout(window._rz); window._rz = setTimeout(draw, 150); });
+
+// ------------------------------------------------------------ header
+function drawHeader() {
+  const billedRows = D.outlook.filter((r) => isBilled(r.job)), activeRows = D.outlook.filter((r) => !isBilled(r.job));
+  const viewRows = D.outlook.filter((r) => inView(r.job));
+  const s = summarize(viewRows);
+  const recentBilled = billedRows.filter((r) => (D.byJob[r.job].recent_hours || 0) > 0);
+  const recentCost = d3.sum(recentBilled, (r) => D.byJob[r.job].recent_hours);
+  const scope = activeTab === 'billed' ? 'fully billed' : includeBilled ? 'open' : 'active';
+  const projText = s.losing + ' ' + scope + ' ' + (s.losing === 1 ? 'job is' : 'jobs are') + ' projected to lose money and ' + s.missing + ' more to miss ' + FMT.pct(TARGET) + ', covering ' +
+    compact(s.losing_contract + s.missing_contract) + ' of ' + compact(s.contract) + ' in ' + scope + ' job value. ' + s.on_track + ' ' + (s.on_track === 1 ? 'is' : 'are') +
+    ' on track; ' + (s.too_early + s.early_warning) + ' ' + (s.too_early + s.early_warning === 1 ? 'is' : 'are') + ' too early to project' + (s.early_warning ? ', and ' + s.early_warning + ' of those already ' + (s.early_warning === 1 ? 'shows' : 'show') + ' warning signs.' : '.');
+  document.getElementById('takeaway').textContent = activeTab === 'billed'
+    ? billedRows.length + ' jobs are fully billed but still open in Innergy. Nothing is left to bill on them, so any cost from here comes straight off margin' +
+      (recentBilled.length ? '; ' + recentBilled.length + ' logged ' + hrsFmt(recentCost) + ' job hours in the last 14 days. ' : '. ') + projText
+    : projText;
+  document.getElementById('tab-active').textContent = 'Active jobs (' + activeRows.length + ')';
+  document.getElementById('tab-billed').textContent = 'Fully billed (' + billedRows.length + ')';
+  const co = document.getElementById('billed-callout');
+  co.hidden = !(activeTab === 'active' && !includeBilled && recentBilled.length);
+  if (!co.hidden) {
+    co.replaceChildren(document.createTextNode(recentBilled.length + ' fully billed ' + (recentBilled.length === 1 ? 'job' : 'jobs') + ' logged ' + hrsFmt(recentCost) + ' job hours in the last 14 days with nothing left to bill: ' +
+      recentBilled.sort((a, b) => D.byJob[b.job].recent_hours - D.byJob[a.job].recent_hours).map((r) => shortName(D.byJob[r.job].name) + ' (' + hrsFmt(D.byJob[r.job].recent_hours) + ' h)').join(', ') + '. '));
+    const go = el('button', null, 'See fully billed jobs');
+    go.addEventListener('click', () => document.getElementById('tab-billed').click());
+    co.append(go);
+  }
+  const t = new Date(D.meta.refreshed_at), hrs = (Date.now() - t) / 36e5;
+  document.getElementById('stamp').textContent = 'Innergy data pulled ' + t.toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) + ' · ' + activeRows.length + ' active, ' + billedRows.length + ' fully billed';
+  const warns = [];
+  const m = D.meta;
+  if (m.last_refresh_error) warns.push('The last refresh failed (' + new Date(m.last_refresh_error.at).toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) + '): ' + m.last_refresh_error.message + '. The numbers below are from the last pull that worked.');
+  if (!m.version || m.version < 3) warns.push('This data was saved by an older version of the script, so billing figures are missing. Click Refresh from Innergy, or run setup in the script editor.');
+  if (m.trigger_installed === false) warns.push('The hourly refresh isn\'t installed. In the script editor, run setup once to install it.');
+  if (m.billing_error) warns.push('Couldn\'t read the SP Billing Dashboard (' + m.billing_error + '). Job values are from Innergy until that\'s fixed.');
+  if (hrs > (D.meta.stale_after_hours || 3)) warns.push('This data is ' + Math.round(hrs) + ' hours old. The hourly refresh may have stopped; click Refresh, or check the script\'s triggers.');
+  if (D.health.length) warns.push(D.health.length + ' job' + (D.health.length === 1 ? '' : 's') + ' don\'t match Innergy\'s own hour totals. See "Data check" on the How it\'s calculated tab.');
+  const w = document.getElementById('warn'); w.hidden = !warns.length; w.textContent = warns.join(' ');
+  const keys = [['Losing money', 'losing'], [LBL.missing, 'missing'], ['At risk', 'at_risk'], ['Early warning', 'early_warning'], ['On track', 'on_track'], ['Too early to call', 'too_early']];
+  document.getElementById('strip').replaceChildren(...keys.map(([label, k]) => {
+    const b = el('button', 'chip'); b.setAttribute('aria-pressed', String(verdictFilter === label));
+    const n = el('span', 'n', String(s[k])); n.style.color = s[k] ? VC[label] : 'var(--muted)';
+    b.append(n, el('span', 'l', label), el('span', 'm', compact(s[k + '_contract']) + ' job value'));
+    b.addEventListener('click', () => { verdictFilter = verdictFilter === label ? null : label; draw(); });
+    return b;
+  }));
+}
+
+// ------------------------------------------------------------ board
+const SPEND_MAX = 1.2;
+const sx = (v) => 100 * Math.min(SPEND_MAX, Math.max(0, v)) / SPEND_MAX;
+function spendCell(r, j) {
+  const wrap = el('div');
+  const bar = el('div', 'spend');
+  if (r.cost_pct !== null) {
+    const f = el('div', 'f'); f.style.width = sx(r.cost_pct) + '%';
+    f.style.background = r.cost_pct > BREAKEVEN ? 'var(--bad)' : r.cost_pct > LINE ? 'var(--warn)' : 'var(--accent)';
+    bar.append(f);
+    if (r.cost_pct > SPEND_MAX) bar.append(el('span', 'over', '▶'));
+  }
+  const l1 = el('div', 'line'); l1.style.left = sx(LINE) + '%'; bar.append(l1);
+  const l2 = el('div', 'line be'); l2.style.left = sx(BREAKEVEN) + '%'; bar.append(l2);
+  if (r.cost_pct !== null && r.verdict !== 'Not started') { const d = el('div', 'done'); d.style.left = sx(LINE * r.progress) + '%'; d.title = 'About ' + pct0(r.progress) + ' done, so on budget it would have spent ' + pct0(LINE * r.progress); bar.append(d); }
+  wrap.append(bar);
+  wrap.append(el('div', 'spendtxt', r.cost_pct === null ? 'no job value' : pct0(r.cost_pct) + ' spent (' + compact(r.cost_to_date) + ') · ~' + pct0(r.progress) + ' done'));
+  return wrap;
+}
+function drawBoard() {
+  const sel = document.getElementById('pm-filter');
+  const pms = [...new Set(D.jobs.map((j) => j.pm))].sort();
+  if (sel.options.length !== pms.length + 1) sel.replaceChildren(new Option('All PMs', ''), ...pms.map((p) => new Option(p === '—' ? '(no PM assigned)' : p, p)));
+  sel.value = pmFilter;
+  const tw = document.getElementById('billed-toggle-wrap');
+  tw.hidden = activeTab !== 'active';
+  document.getElementById('billed-toggle').checked = includeBilled;
+  document.getElementById('billed-toggle-label').textContent = 'Include fully billed jobs (' + D.outlook.filter((r) => isBilled(r.job)).length + ')';
+  const rows = D.outlook.filter((r) => inView(r.job) && (!pmFilter || D.byJob[r.job].pm === pmFilter) && (!verdictFilter || r.verdict === verdictFilter))
+    .sort((a, b) => VERDICTS.indexOf(a.verdict) - VERDICTS.indexOf(b.verdict) || (a.expected_margin ?? 9) - (b.expected_margin ?? 9) || (b.cost_pct ?? 0) - (a.cost_pct ?? 0));
+  document.getElementById('filter-note').textContent = (verdictFilter ? 'Showing: ' + verdictFilter + ' · ' : '') + rows.length + ' jobs' + (verdictFilter ? ' (click the tile again to clear)' : '');
+  if (selected && !rows.some((r) => r.job === selected)) selected = null;
+  document.querySelector('#board tbody').replaceChildren(...rows.map((r) => {
+    const j = D.byJob[r.job], tr = el('tr'); tr.dataset.key = r.job; if (r.job === selected) tr.className = 'sel';
+    const td1 = el('td'); td1.append(el('div', 'jobname', shortJob(j.name)), el('div', 'meta', j.job + ' · ' + j.pm + ' · ' + compact(+j.contract) + (j.contract_source === 'billing sheet' ? '' : ' (Innergy)') + (j.status === 'On Hold' ? ' · on hold' : '') + (isBilled(r.job) && activeTab === 'active' ? ' · fully billed' : '') + (isBilled(r.job) && j.recent_hours > 0 ? ' · ' + hrsFmt(j.recent_hours) + ' h in last 14 days' : '')));
+    const td2 = el('td'); td2.append(spendCell(r, j));
+    const fullyBilled = j.billing_status && j.billing_status.indexOf('fully billed') === 0;
+    const td3 = el('td', 'num hide-narrow', r.invoiced_pct == null ? '—' : pct0(r.invoiced_pct));
+    if (fullyBilled) { td3.classList.add('c-muted'); td3.title = 'Fully billed; not on the billing sheet'; }
+    else if (r.invoiced_pct != null && r.cost_pct > r.invoiced_pct) td3.style.color = 'var(--bad)';
+    const td4 = el('td', 'num', r.expected_margin === null ? '—' : pct(r.expected_margin)); td4.style.color = r.expected_margin === null ? 'var(--muted)' : VC[r.verdict];
+    const td5 = el('td'); const v = el('span', 'verdict', r.verdict); v.style.color = VC[r.verdict]; td5.append(v);
+    const top = D.flags.filter((f) => f.job === r.job && f.severity !== 'low').sort((a, b) => SEV[a.severity] - SEV[b.severity]).slice(0, 2);
+    const td6 = el('td', 'why hide-narrow', top.map((f) => f.flag).join(' · ') || '—');
+    tr.append(td1, td2, td3, td4, td5, td6); return tr;
+  }));
+}
+document.getElementById('board').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-key]'); if (!tr) return;
+  selected = tr.dataset.key; draw(); document.getElementById('detail').scrollIntoView({behavior: 'smooth', block: 'start'});
+});
+document.getElementById('pm-filter').addEventListener('change', (e) => { pmFilter = e.target.value; draw(); });
+document.getElementById('billed-toggle').addEventListener('change', (e) => { includeBilled = e.target.checked; verdictFilter = null; draw(); });
+document.getElementById('detail-close').addEventListener('click', () => { selected = null; draw(); });
+document.getElementById('more').addEventListener('toggle', () => draw());
+
+// ------------------------------------------------------------ detail
+function drawDetail() {
+  const panel = document.getElementById('detail');
+  if (!selected || !D.byJob[selected]) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const j = D.byJob[selected], r = D.byOutlook[selected], lb = D.lookback_summary;
+  const set = (id, text, color) => { const e = document.getElementById(id); e.textContent = text; e.style.color = color || ''; };
+  set('d-title', shortJob(j.name));
+  set('d-sub', j.job + ' · ' + j.status + ' · PM ' + j.pm + ' · ' + hrsFmt(j.drafting_hours + j.shop_hours) + ' job hours (' + hrsFmt(j.overhead_hours_excluded) + ' PM/overhead hours not counted) · planned finish ' + (j.planned_finish || 'n/a') + (j.drafting_note ? ' · ' + j.drafting_note : ''));
+  set('d-verdict', r.verdict, VC[r.verdict]);
+  set('d-range', r.expected_margin === null ? (r.verdict === 'Early warning' ? 'Spent more than any lookback winner had by halfway' : 'Not enough shop progress to project') : 'Projected ' + pct(r.expected_margin) + ', likely ' + pct(r.low_margin) + ' to ' + pct(r.high_margin));
+  set('d-pct', r.cost_pct === null ? '—' : pct0(r.cost_pct), r.cost_pct > BREAKEVEN ? 'var(--bad)' : r.cost_pct > LINE ? 'var(--warn)' : '');
+  set('d-cost', money(r.cost_to_date) + ' of ' + money(j.contract) + ' (' + j.contract_source + ') · labor ' + money(j.drafting_cost + j.shop_cost) + ' · POs ' + money(j.po_received + j.po_open));
+  if (j.billing_status && j.billing_status.indexOf('fully billed') === 0) { set('d-inv', r.invoiced_pct == null ? '—' : '100%'); set('d-inv-sub', 'Fully billed; not on the billing sheet'); }
+  else if (r.invoiced_pct == null) { set('d-inv', '—'); set('d-inv-sub', 'No billing figures on the billing sheet'); }
+  else {
+    set('d-inv', pct0(r.invoiced_pct), r.cost_pct > r.invoiced_pct ? 'var(--bad)' : '');
+    set('d-inv-sub', 'Paid ' + money(j.billed_paid) + ' · open ' + money(j.billed_open || 0) + (j.billed_ready ? ' · ready to invoice ' + money(j.billed_ready) : ''));
+  }
+  set('d-prog', '~' + pct0(r.progress));
+  set('d-wo', 'Shop ' + pct0(j.shop_progress) + ' · drafting ' + pct0(j.drafting_progress) + ' · ' + j.work_orders_delivered + ' of ' + j.work_orders + ' work orders delivered');
+  set('d-hrs', r.hours_per_1k === null ? '—' : d3.format('.1f')(r.hours_per_1k), r.hours_per_1k > lb.lost_median_hours_per_1k ? 'var(--bad)' : r.hours_per_1k > lb.hit_max_hours_per_1k ? 'var(--warn)' : '');
+  set('d-hrs-sub', 'Winners ≤ ' + d3.format('.1f')(lb.hit_max_hours_per_1k) + ' · median loser ' + d3.format('.1f')(lb.lost_median_hours_per_1k));
+  drawCostChart(j);
+  const flags = D.flags.filter((f) => f.job === selected).sort((a, b) => SEV[a.severity] - SEV[b.severity]);
+  document.querySelector('#flags-table tbody').replaceChildren(...(flags.length ? flags.map((f) => {
+    const tr = el('tr'), a = el('td'); a.append(el('span', 'pill ' + SEVC[f.severity], f.severity)); tr.append(a, el('td', null, f.flag), el('td', null, f.detail)); return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'c-muted', 'No flags'); td.colSpan = 3; tr.append(td); return tr; })()]));
+  if (document.getElementById('more').open) { drawDepts(); drawWOs(); }
+}
+function axisStyle(g) { g.selectAll('text').attr('fill', 'var(--muted)').style('font-size', '11px'); g.attr('font-family', null); }
+function drawCostChart(j) {
+  const box = document.getElementById('cost-chart'); box.replaceChildren();
+  const rows = D.weekly.filter((r) => r.job === j.job).map((r) => ({week: new Date(r.week + 'T00:00:00Z'), cum: r.cumulative_cost, labor: r.labor, po: r.po}));
+  const leg = document.getElementById('cost-legend'); leg.replaceChildren();
+  if (!rows.length) { box.append(el('p', 'c-muted', 'No cost logged yet.')); return; }
+  const W = Math.max(280, box.clientWidth), H = 280, contract = j.contract, l50 = LINE * contract, l66 = BREAKEVEN * contract;
+  const ymax = Math.max(d3.max(rows, (r) => r.cum), l66 || 1) * 1.08;
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const probe = svg.append('text').attr('font-size', 11).text(compact(ymax)); const ml = probe.node().getComputedTextLength() + 14; probe.remove();
+  const mr = 16, mt = 12, mb = 26;
+  const x = rows.length > 1 ? d3.scaleUtc(d3.extent(rows, (r) => r.week), [ml, W - mr]) : d3.scaleUtc([d3.utcWeek.offset(rows[0].week, -1), d3.utcWeek.offset(rows[0].week, 1)], [ml, W - mr]);
+  const y = d3.scaleLinear([0, ymax], [H - mb, mt]);
+  const ya = svg.append('g').attr('transform', `translate(${ml},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(compact).tickSize(-(W - ml - mr)));
+  ya.select('.domain').remove(); ya.selectAll('line').attr('stroke', 'var(--grid)'); axisStyle(ya);
+  const xa = svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - ml) / 90))).tickFormat(d3.utcFormat("%b '%y")).tickSizeOuter(0));
+  xa.selectAll('line,.domain').attr('stroke', 'var(--axis)'); axisStyle(xa);
+  [[l50, 'var(--warn)'], [l66, 'var(--bad)'], [contract, 'var(--ref)']].forEach(([v, c]) => { if (v > 0 && v <= ymax) svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', c).attr('stroke-dasharray', '5 4').attr('stroke-width', 1.5); });
+  svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', 'var(--accent)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((r) => x(r.week)).y((r) => y(r.cum)));
+  const cross = contract > 0 ? rows.find((r) => r.cum > l50) : null;
+  if (cross) svg.append('circle').attr('cx', x(cross.week)).attr('cy', y(cross.cum)).attr('r', 4).attr('fill', 'var(--warn)');
+  const dot = svg.append('circle').attr('r', 4).attr('fill', 'var(--accent)').style('display', 'none');
+  const tip = d3.select(box).append('div').attr('class', 'tip').style('display', 'none');
+  const bis = d3.bisector((r) => r.week).center;
+  svg.append('rect').attr('x', ml).attr('y', mt).attr('width', W - ml - mr).attr('height', H - mt - mb).attr('fill', 'transparent')
+    .on('mousemove', (ev) => {
+      const r = rows[bis(rows, x.invert(d3.pointer(ev)[0]))];
+      dot.style('display', null).attr('cx', x(r.week)).attr('cy', y(r.cum));
+      tip.style('display', null).html('');
+      tip.append('div').attr('class', 'd').text('Week of ' + d3.utcFormat('%b %-d, %Y')(r.week));
+      tip.append('div').text('Cumulative ' + money(r.cum) + (contract > 0 ? ' (' + pct0(r.cum / contract) + ' of job value)' : ''));
+      tip.append('div').text('This week: labor ' + money(r.labor) + ', POs ' + money(r.po));
+      const bw = box.clientWidth; tip.style('left', Math.min(Math.max(0, x(r.week) / W * bw - 110), bw - 240) + 'px').style('top', '4px');
+    }).on('mouseleave', () => { dot.style('display', 'none'); tip.style('display', 'none'); });
+  const add = (t, c, dash) => { const s = el('span', dash ? 'dash' : null, t); s.style.setProperty('--sw', c); leg.append(s); };
+  add('Cumulative cost', 'var(--accent)');
+  if (contract > 0) { add(FMT.pct(LINE) + ' cost line ' + compact(l50), 'var(--warn)', 1); add('Break-even ' + compact(l66), 'var(--bad)', 1); }
+  if (contract > 0 && contract <= ymax) add('Job value ' + compact(contract), 'var(--ref)', 1);
+  if (cross) add('Crossed ' + FMT.pct(LINE) + ' the week of ' + d3.utcFormat('%b %-d, %Y')(cross.week), 'transparent');
+}
+function drawDepts() {
+  const rows = D.departments.filter((r) => r.job === selected), max = d3.max(rows, (r) => r.hours) || 1;
+  document.getElementById('dept-bars').replaceChildren(...rows.map((r) => {
+    const row = el('div', 'barrow'), t = el('div', 'track'), f = el('div', 'fill');
+    f.style.width = (100 * r.hours / max) + '%'; f.style.background = r.department === 'Drafting' ? 'var(--accent2)' : 'var(--accent)'; t.append(f);
+    const v = el('div', null, hrsFmt(r.hours) + ' h'); v.style.textAlign = 'right';
+    row.append(el('div', null, r.department), t, v); return row;
+  }));
+}
+function drawWOs() {
+  const rows = D.work_orders.filter((w) => w.job === selected);
+  document.querySelector('#wo-table tbody').replaceChildren(...rows.map((w) => {
+    const tr = el('tr');
+    [[w.work_order], [w.name], [w.step], [money(w.price), 'num'], [hrsFmt(w.planned_hours), 'num'], [hrsFmt(w.actual_hours), 'num' + (w.actual_hours > A.flags.planned_stale_ratio * w.planned_hours && w.actual_hours > A.board.planned_highlight_min_hours ? ' c-warn' : '')]]
+      .forEach(([t, c]) => tr.append(el('td', c, t)));
+    return tr;
+  }));
+}
+
+// ------------------------------------------------------------ lookback
+function drawHistory() {
+  const s = D.lookback_summary;
+  document.getElementById('lb-tabname').textContent = 'Closed jobs (' + s.jobs + ')';
+  document.getElementById('lb-title').textContent = 'The ' + s.jobs + ' jobs';
+  document.getElementById('lb-take').textContent = s.small_lost + ' of the ' + s.small_jobs + ' jobs under ' + FMT.usdk(A.lookback.small_job_max) + ' lost money. No job that hit ' + FMT.pct(TARGET) + ' had spent more than ' + pct0(s.hit_max_cost_at_half) +
+    ' of its contract by the halfway point of its schedule; ' + s.lost_over_hit_max + ' of the ' + s.lost + ' losers had. Winners used at most ' + d3.format('.1f')(s.hit_max_hours_per_1k) +
+    ' job hours per $1k of contract; the median loser used ' + d3.format('.1f')(s.lost_median_hours_per_1k) + '.';
+  const tiles = [['Closed jobs with timesheets and POs', s.jobs, '', 'Over ' + FMT.usdk(A.lookback.min_contract) + ', created since ' + FMT.mon(A.lookback.created_from)], [LBL.hit, s.hit, 'c-ok', 'Cost at or under ' + FMT.pct(LINE) + ' of contract'],
+    [LBL.under, s.under, 'c-warn', 'Cost between ' + FMT.pct(LINE) + ' and ' + FMT.pct(BREAKEVEN)], ['Lost money', s.lost, 'c-bad', 'Cost over ' + FMT.pct(BREAKEVEN) + ' of contract']];
+  document.getElementById('lb-kpis').replaceChildren(...tiles.map(([l, n, c, sub]) => { const t = el('div', 'tile'); t.append(el('p', 'lab', l), el('span', 'big ' + c, String(n)), el('p', 'sub', sub)); return t; }));
+  drawCurves(); drawSize(); drawLbTable();
+}
+function drawCurves() {
+  const box = document.getElementById('curves-chart'); box.replaceChildren();
+  const series = D.lookback.map((j) => {
+    const rows = D.weekly.filter((r) => r.job === j.job), t0 = Date.parse(rows[0].week), span = (Date.parse(rows[rows.length - 1].week) - t0) / 6048e5 + 1;
+    return {job: j.job, name: shortName(j.name), outcome: D.byLb[j.job].outcome, pts: [{f: 0, y: 0}, ...rows.map((r) => ({f: ((Date.parse(r.week) - t0) / 6048e5 + 1) / span, y: r.cumulative_cost / j.contract}))]};
+  });
+  const W = Math.max(280, box.clientWidth), H = 300, ml = 40, mr = 12, mt = 10, mb = 28;
+  const ymax = Math.max(1, d3.max(series, (s) => d3.max(s.pts, (p) => p.y))) * 1.05;
+  const x = d3.scaleLinear([0, 1], [ml, W - mr]), y = d3.scaleLinear([0, ymax], [H - mb, mt]);
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const ya = svg.append('g').attr('transform', `translate(${ml},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')).tickSize(-(W - ml - mr)));
+  ya.select('.domain').remove(); ya.selectAll('line').attr('stroke', 'var(--grid)'); axisStyle(ya);
+  const xa = svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).ticks(4).tickFormat(d3.format('.0%')).tickSizeOuter(0));
+  xa.selectAll('line,.domain').attr('stroke', 'var(--axis)'); axisStyle(xa);
+  [[LINE, 'var(--warn)'], [BREAKEVEN, 'var(--bad)']].forEach(([v, c]) => svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', c).attr('stroke-dasharray', '5 4').attr('stroke-width', 1.5));
+  svg.append('line').attr('x1', x(0.5)).attr('x2', x(0.5)).attr('y1', mt).attr('y2', H - mb).attr('stroke', 'var(--ref)').attr('stroke-dasharray', '2 4');
+  const order = {[LBL.under]: 0, [LBL.hit]: 1, 'Lost money': 2};
+  const line = d3.line().x((p) => x(p.f)).y((p) => y(p.y));
+  const tip = d3.select(box).append('div').attr('class', 'tip').style('display', 'none');
+  const paths = svg.append('g').selectAll('path').data([...series].sort((a, b) => order[a.outcome] - order[b.outcome])).join('path')
+    .attr('fill', 'none').attr('stroke', (s) => OUTC(s.outcome)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', (s) => line(s.pts));
+  svg.append('g').selectAll('path').data(series).join('path').attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 12).attr('d', (s) => line(s.pts))
+    .on('mousemove', (ev, s) => {
+      paths.attr('opacity', (o) => o.job === s.job ? 1 : 0.15);
+      tip.style('display', null).html('');
+      tip.append('div').attr('class', 'd').text(s.job + ' · ' + s.outcome); tip.append('div').text(s.name); tip.append('div').text('Final cost ' + pct0(s.pts[s.pts.length - 1].y) + ' of contract');
+      const [px, py] = d3.pointer(ev, box), bw = box.clientWidth; tip.style('left', Math.min(Math.max(0, px + 12), bw - 220) + 'px').style('top', Math.max(0, py - 60) + 'px');
+    }).on('mouseleave', () => { paths.attr('opacity', 1); tip.style('display', 'none'); });
+  const leg = document.getElementById('curves-legend'); leg.replaceChildren();
+  [[LBL.hit, 'var(--accent)'], [LBL.under, 'var(--muted-mark)'], ['Lost money', 'var(--bad)'], [FMT.pct(LINE) + ' cost line', 'var(--warn)', 1], ['Break-even ' + FMT.pct(BREAKEVEN), 'var(--bad)', 1]]
+    .forEach(([t, c, d]) => { const s = el('span', d ? 'dash' : null, t); s.style.setProperty('--sw', c); leg.append(s); });
+}
+function drawSize() {
+  const box = document.getElementById('size-chart'); box.replaceChildren();
+  const pts = D.lookback.map((j) => ({job: j.job, name: shortName(j.name), c: j.contract, mg: D.byLb[j.job].margin, outcome: D.byLb[j.job].outcome}));
+  const W = Math.max(280, box.clientWidth), H = 300, ml = 44, mr = 16, mt = 10, mb = 28;
+  const x = d3.scaleLog([d3.min(pts, (p) => p.c) * 0.8, d3.max(pts, (p) => p.c) * 1.25], [ml, W - mr]);
+  const y = d3.scaleLinear([Math.min(-0.1, d3.min(pts, (p) => p.mg)) - 0.05, Math.max(0.3, d3.max(pts, (p) => p.mg)) + 0.05], [H - mb, mt]);
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const ya = svg.append('g').attr('transform', `translate(${ml},0)`).call(d3.axisLeft(y).ticks(6).tickFormat(d3.format('.0%')).tickSize(-(W - ml - mr)));
+  ya.select('.domain').remove(); ya.selectAll('line').attr('stroke', 'var(--grid)'); axisStyle(ya);
+  const ticks = [25000, 50000, 100000, 250000, 500000, 1000000].filter((t) => t >= x.domain()[0] && t <= x.domain()[1]);
+  const xa = svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(compact).tickSizeOuter(0));
+  xa.selectAll('line,.domain').attr('stroke', 'var(--axis)'); axisStyle(xa);
+  [[TARGET, 'var(--ok)'], [0, 'var(--bad)']].forEach(([v, c]) => svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', c).attr('stroke-dasharray', '5 4').attr('stroke-width', 1.5));
+  const tip = d3.select(box).append('div').attr('class', 'tip').style('display', 'none');
+  svg.append('g').selectAll('circle').data(pts).join('circle').attr('cx', (p) => x(p.c)).attr('cy', (p) => y(p.mg)).attr('r', 6)
+    .attr('fill', (p) => OUTC(p.outcome)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5)
+    .on('mousemove', (ev, p) => {
+      tip.style('display', null).html(''); tip.append('div').attr('class', 'd').text(p.job); tip.append('div').text(p.name); tip.append('div').text(money(p.c) + ' · margin ' + pct(p.mg));
+      const [px, py] = d3.pointer(ev, box), bw = box.clientWidth; tip.style('left', Math.min(Math.max(0, px + 12), bw - 220) + 'px').style('top', Math.max(0, py - 60) + 'px');
+    }).on('mouseleave', () => tip.style('display', 'none'));
+}
+function drawLbTable() {
+  const rows = [...D.lookback].sort((a, b) => D.byLb[b.job].margin - D.byLb[a.job].margin);
+  const scaleMax = Math.max(1.1, d3.max(rows, (r) => D.byLb[r.job].cost_pct));
+  document.querySelector('#lb-table tbody').replaceChildren(...rows.map((h) => {
+    const r = D.byLb[h.job], tr = el('tr');
+    const td = (t, c) => { const x = el('td', c, t); tr.append(x); return x; };
+    td(h.job); td(h.name); td(h.pm); td(money(h.contract), 'num'); td(h.contract_source === 'total contract' ? 'contract' : 'work orders', h.contract_source === 'total contract' ? '' : 'c-muted');
+    td(money(h.labor_cost), 'num'); td(money(h.po_cost), 'num'); td(d3.format('.1f')(r.hours_per_1k), 'num'); td(hrsFmt(h.overhead_hours_excluded), 'num c-muted');
+    td(String(r.weeks), 'num'); td(pct0(r.cost_at_half_schedule), 'num'); td(pct0(r.cost_pct), 'num');
+    const b = td(''), bar = el('div', 'hbar'), f = el('div', 'f'); f.style.width = Math.min(100, 100 * r.cost_pct / scaleMax) + '%'; f.style.background = OUTC(r.outcome); bar.append(f);
+    [LINE, BREAKEVEN].forEach((v) => { const ref = el('div', 'ref'); ref.style.left = (100 * v / scaleMax) + '%'; bar.append(ref); }); b.append(bar);
+    td(pct(r.margin), 'num ' + marginClass(r.margin));
+    return tr;
+  }));
+}
+
+// ------------------------------------------------------------ method
+function drawMethod() {
+  const ex = (D.lookback_excluded || []).map((j) => shortJob(j.name));
+  document.getElementById('lb-excluded').textContent = ex.length ? ' ' + (ex.length > 1 ? ex.slice(0, -1).join(', ') + ' and ' + ex[ex.length - 1] : ex[0]) + (ex.length > 1 ? ' are' : ' is') + ' left out because ' + (ex.length > 1 ? 'they were' : 'it was') + ' done before POs went into Innergy.' : '';
+  document.getElementById('unassigned').textContent = d3.format(',')(D.meta.unassigned_hours) + ' hours';
+  document.getElementById('health').textContent = D.health.length
+    ? 'Hours: ' + D.health.length + ' of ' + D.meta.jobs_checked + ' jobs have approved hours that don\'t match Innergy\'s project totals: ' + D.health.map((x) => x.job + ' (' + x.ours + ' here vs ' + x.innergy + ' in Innergy)').join(', ') + '.'
+    : 'Hours: on the last pull, approved hours for all ' + D.meta.jobs_checked + ' jobs on this page matched Innergy\'s own project totals. Pulled ' + d3.format(',')(D.meta.timesheet_entries) + ' timesheet entries, ' + d3.format(',')(D.meta.po_lines) + ' PO lines and ' + d3.format(',')(D.meta.work_orders) + ' work orders in ' + D.meta.refresh_seconds + ' seconds.';
+  const pm = D.billing_paid_mismatch || [];
+  document.getElementById('billing-paid').textContent = pm.length
+    ? 'Billing paid-to-date: ' + A.billing.summary_tab + ' overstates paid on ' + pm.length + ' job' + (pm.length === 1 ? '' : 's') + ', by ' + money(d3.sum(pm, (x) => x.mstr_paid - x.tab_paid)) + ' in total, because paid change orders are counted twice: ' + pm.map((x) => x.billing_project + ' (MSTR ' + money(x.mstr_paid) + ' vs tab ' + money(x.tab_paid) + ')').join(', ') + '. This page uses the tab figures.'
+    : 'Billing paid-to-date: ' + A.billing.summary_tab + ' and the job tabs agree.';
+  document.querySelector('#billing-check tbody').replaceChildren(...(D.billing_check || []).map((c) => {
+    const tr = el('tr');
+    tr.append(el('td', null, c.billing_project), el('td', c.job ? null : 'c-bad', c.job ? c.job + ' ' + c.innergy_name : 'No match. Pin it in CONFIG.BILLING_MATCH'),
+      el('td', c.confident ? null : 'c-warn', c.matched_by + (c.confident ? '' : ' (check)')), el('td', 'num', c.billing_total ? money(c.billing_total) : 'blank'), el('td', 'num', money(c.innergy_value)));
+    return tr;
+  }));
+}
+
+google.script.run.withSuccessHandler(load).withFailureHandler(fail).getData();
+</script>
+</body>
+</html>

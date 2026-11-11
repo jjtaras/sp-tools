@@ -28,5 +28,16 @@ var CONFIG = (function (A) {
     MIN_SHOP_PROGRESS: A.outlook.min_shop_progress,   // below this, too early to project
     DATA_FILE_NAME: 'SP Margin Board data.json',
     STALE_AFTER_HOURS: A.board.stale_after_hours,
+    PROGRESS_WEIGHTS: A.outlook.progress_weights,     // {drafting, shop}: how much of % done each counts for
+    UNORDERED_UNTIL: A.outlook.unordered_until_shop_progress,
+    FLAG_BURN_HIGH: A.flags.burn_high,
+    FLAG_BURN_MEDIUM: A.flags.burn_medium,
+    FLAG_CASH_AHEAD: A.flags.cash_ahead,
+    PLANNED_STALE_RATIO: A.flags.planned_stale_ratio,
+    CO_GAP_SHARE: A.billing.co_gap_share,
+    RECEIVING_MIN_PO: A.receiving.min_po,
+    RECEIVING_ERROR_RATIO: A.receiving.error_ratio,
+    RECEIVING_ERROR_MIN_GAP: A.receiving.error_min_gap,
+    SMALL_JOB_MAX: A.lookback.small_job_max,
   };
 })(ASSUMPTIONS);
