@@ -75,12 +75,31 @@ L.push(`| Showpiece (× cased) | ${f2(c.showpiece.current)} | ${f2(c.showpiece.d
 L.push(`| CNC (${c.cnc.current.base} + ${c.cnc.current.per_part} × parts) | formula | actual ÷ formula ${f2(c.cnc.ratio)}${c.cnc.fit ? `; fit ${f2(c.cnc.fit.base)} + ${c.cnc.fit.per.toFixed(3)} × parts` : ''} | ${pct(c.cnc.ratio == null ? null : c.cnc.ratio - 1)} | ${c.cnc.n} | ${c.cnc.jobs.join(', ') || '–'} | ${verdict(c.cnc.n, c.cnc.ratio == null ? 0 : c.cnc.ratio - 1)} |`);
 L.push(`| Primer (h/sq ft primed) | ${f2(c.primer.current)} | ${f2(c.primer.data)} | ${pct(c.primer.drift)} | ${c.primer.n} | ${c.primer.jobs.join(', ') || '–'} | ${verdict(c.primer.n, c.primer.drift || 0)} |`);
 L.push('', 'Fab points are work orders taken off as a single build type. Showpiece points back out the plain elevations and allowances at today\'s rates. "Set from these WOs" means the only data is the work order the rate was taken from.', '');
-L.push('## Work orders', '', '| WO | Name | Counts? | Why | On the sheet CNC / Fab / Fin | Today\'s rates | Actual CNC / Fab / Fin | Pending h | Excluded |', '|---|---|---|---|---|---|---|---|---|');
+L.push('## Work orders', '', '| WO | Name | Estimated by | Counts? | Why | On the sheet CNC / Fab / Fin | Today\'s rates | Actual CNC / Fab / Fin | Pending h | Excluded |', '|---|---|---|---|---|---|---|---|---|---|');
 for (const r of c.rows.sort((a, b) => a.wo.localeCompare(b.wo))) {
   const w = byWo[r.wo], name = (w && w.Name && w.Name.DisplayName) || r.name || '';
   const s = (h) => [h.cnc, h.fab, h.fin].map(f1).join(' / ');
   const a = r.actual ? [r.actual.cnc, r.actual.fab, r.actual.fin].map(f1).join(' / ') : 'no hours';
-  L.push(`| ${r.wo} | ${name} | ${r.settled ? 'yes' : 'no'} | ${r.why} | ${s(r.issued)} | ${s(r.estimate)} | ${a} | ${r.actual ? f1(r.actual.pending) : '–'} | ${Object.entries(r.exclude).map(([k, v]) => `${k}: ${v}`).join('; ') || ''} |`);
+  const recW = records.find((x) => x.work_order === r.wo);
+  L.push(`| ${r.wo} | ${name} | ${(recW && recW.estimated_by) || ''} | ${r.settled ? 'yes' : 'no'} | ${r.why} | ${s(r.issued)} | ${s(r.estimate)} | ${a} | ${r.actual ? f1(r.actual.pending) : '–'} | ${Object.entries(r.exclude).map(([k, v]) => `${k}: ${v}`).join('; ') || ''} |`);
+}
+// Estimate accuracy by estimator: actual ÷ what went on the sheet, per area.
+const byEst = {};
+for (const r of c.rows) {
+  const rec = records.find((x) => x.work_order === r.wo), who = (rec && rec.estimated_by) || 'unknown';
+  if (!r.actual) continue;
+  for (const k of ['cnc', 'fab', 'fin']) {
+    const est = r.issued[k];
+    if (est == null || est === 0 || r.exclude[k]) continue;
+    const g = ((byEst[who] ||= {})[r.settled ? 'settled' : 'running'] ||= { cnc: [0, 0, 0], fab: [0, 0, 0], fin: [0, 0, 0] })[k];
+    g[0] += r.actual[k]; g[1] += est; g[2] += 1;
+  }
+}
+L.push('', '## Estimate accuracy by estimator', '', 'Actual hours ÷ the hours on the checklist, per area (WO count in brackets). Above 1 = the shop took longer than estimated. "So far" counts work orders still running, so those ratios can only grow. Zero estimates and excluded areas are left out.', '',
+  '| Estimator | Work orders | CNC | Fab | Finish |', '|---|---|---|---|---|');
+const ratio = (g) => (g && g[2] ? `${(g[0] / g[1]).toFixed(2)}× (${g[2]})` : '–');
+for (const [who, v] of Object.entries(byEst).sort()) {
+  for (const k of ['settled', 'running']) if (v[k]) L.push(`| ${who} | ${k === 'settled' ? 'settled' : 'running (so far)'} | ${ratio(v[k].cnc)} | ${ratio(v[k].fab)} | ${ratio(v[k].fin)} |`);
 }
 L.push('', '"Today\'s rates" is the take-off priced at the current assumptions (blank where the record has no quantities). Records come from tools/checklist; back-filled ones are marked in their source.', '');
 const outDir = path.join(configDir(), 'estimating', 'calibration');

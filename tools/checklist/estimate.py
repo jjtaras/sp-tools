@@ -207,6 +207,7 @@ def make_record(wo, takeoff, est, rates, recommendation, issued_hours, source="m
         "takeoff": takeoff,
         "estimate": {"hours": est["hours"], "lines": est["lines"], "warnings": est["warnings"]},
         "issued_hours": issued_hours,   # what the checklist says (may differ if a PM overrode)
+        "estimated_by": None,           # set by the caller (the PM on the work order)
         "exclude": {},                  # e.g. {"cnc": "hours logged to another WO"}; set during review
     }
 

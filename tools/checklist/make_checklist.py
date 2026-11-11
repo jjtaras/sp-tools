@@ -548,6 +548,7 @@ def build(wo_number, intake, template, out_dir):
     if est:
         issued = {"cnc": intake.get("est_cnc"), "fab": intake.get("est_fab"), "fin": intake.get("est_fin")}
         record = estimating.make_record(wo, takeoff, est, rates, recommendation, issued)
+        record["estimated_by"] = values[F_PM]
         record_paths = estimating.write_record(record, beside_pdf=out_path)
 
     return {
