@@ -33,7 +33,6 @@ var CONFIG = (function (A) {
     FLAG_BURN_HIGH: A.flags.burn_high,
     FLAG_BURN_MEDIUM: A.flags.burn_medium,
     FLAG_CASH_AHEAD: A.flags.cash_ahead,
-    PLANNED_STALE_RATIO: A.flags.planned_stale_ratio,
     CO_GAP_SHARE: A.billing.co_gap_share,
     RECEIVING_MIN_PO: A.receiving.min_po,
     RECEIVING_ERROR_RATIO: A.receiving.error_ratio,

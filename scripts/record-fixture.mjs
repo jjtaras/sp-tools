@@ -9,7 +9,7 @@ import { copyFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { requireEnv, loadEnv } from '../lib/env.mjs';
-import { innergyClient, qs } from '../adapters/innergy/client.mjs';
+import { innergyClient } from '../adapters/innergy/client.mjs';
 import { readBillingWorkbook } from '../adapters/billing-sheet/xlsx.mjs';
 import { fixturesRoot, writeJson } from '../tests/lib/fixture.mjs';
 import { loadGasProject } from '../tests/lib/gas.mjs';
@@ -67,17 +67,16 @@ const loose = (r, p) => {
   const o = r.text ? JSON.parse(r.text) : null;
   return o && typeof o === 'object' && !Array.isArray(o) && 'Items' in o ? o.Items : o;
 };
-console.log('Production Tracker: open projects and their work orders, dates, job costing; POs; kanban…');
+console.log('Production Tracker: open projects and their work orders and dates; POs; kanban…');
 const open = loose(await api.get('/api/projects'), '/api/projects').filter((p) => (p.Status || '') !== 'Closed');
 const calls = open.flatMap((p) => [
   `/api/projects/${p.Number}`, `/api/projects/${p.Id}/workOrders`, `/api/dateManagement/${p.Id}`,
-  '/api/workOrders/jobCosting' + qs({ projectNumber: p.Number }),
 ]);
 const res = (await api.getAll(calls)).map((r, i) => loose(r, calls[i]));
 const trackerRaw = { projects: [], purchaseOrders: null, kanban: null };
 open.forEach((_, i) => {
-  if (!res[i * 4]) return;
-  trackerRaw.projects.push({ detail: res[i * 4], workOrders: res[i * 4 + 1] || [], dates: res[i * 4 + 2], costing: res[i * 4 + 3] || [] });
+  if (!res[i * 3]) return;
+  trackerRaw.projects.push({ detail: res[i * 3], workOrders: res[i * 3 + 1] || [], dates: res[i * 3 + 2] });
 });
 trackerRaw.purchaseOrders = loose(await api.get('/api/purchaseOrders'), '/api/purchaseOrders') || [];
 trackerRaw.kanban = loose(await api.get('/api/laborKanbanGridItems'), '/api/laborKanbanGridItems') || [];

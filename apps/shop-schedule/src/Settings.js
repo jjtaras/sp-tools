@@ -7,6 +7,7 @@
  * exclude_jobs: job number -> reason, left off the tracker. hold_jobs: shown as on hold, out of counts and load.
  * value_overrides: job -> WO suffix -> value to use when the Innergy price is $0 or wrong.
  * install_included_jobs: job -> share of each WO's value that is installation (taken off before the value rule).
+ * post_fab_fallback_share: past fabrication, remaining hours are capped at this share of the WO's labor budget.
  * critical_placeholders: job -> {from, to}: WOs dated 'from' are treated as due 'to' and labeled as a placeholder.
  * nonshop_pattern: production WOs whose name matches are field/logistics value, not shop hours.
  * outsourced: job -> WO suffix -> {scope, shop_hrs}: made outside; forecast = shop_hrs until Fab is done, then 0. Flagged on the page.

@@ -144,12 +144,11 @@ function pull_() {
     calls.push(['/api/projects/' + p.Number]);
     calls.push(['/api/projects/' + p.Id + '/workOrders']);
     calls.push(['/api/dateManagement/' + p.Id]);
-    calls.push(['/api/workOrders/jobCosting', { projectNumber: p.Number }]);
   });
   var res = getAll_(calls), proj = [];
   projects.forEach(function (p, i) {
-    if (!res[i * 4]) return;  // project detail came back empty
-    proj.push({ detail: res[i * 4], workOrders: res[i * 4 + 1] || [], dates: res[i * 4 + 2], costing: res[i * 4 + 3] || [] });
+    if (!res[i * 3]) return;  // project detail came back empty
+    proj.push({ detail: res[i * 3], workOrders: res[i * 3 + 1] || [], dates: res[i * 3 + 2] });
   });
   // Labor comes from timesheets, counted with the same rules as the Margin Board.
   var months = SPCore.monthsThrough(ASSUMPTIONS.innergy.timesheets_start, new Date()), timesheets = [];
@@ -231,8 +230,6 @@ function kanban_(items) {
            lanes: lanes, readyDate: st === 4 && lane.fin ? lane.fin.entered : null };
 }
 
-var POST_FAB_RX = /FINISH|STAGING|REASSEMBLY/;
-
 /** Actual hours booked to each WO, from timesheets, with the shared labor rules. Overhead is left out. */
 function woHours_(timesheets, rules) {
   var by = {};
@@ -240,24 +237,16 @@ function woHours_(timesheets, rules) {
     if (!t.WorkOrderNumber) return;
     var kind = SPCore.classifyLabor(t.LaborItemName, t.EmployeeDepartment, rules);
     if (kind === 'overhead') return;
-    var h = hrs_(t.ActivityDuration), x = by[t.WorkOrderNumber] = by[t.WorkOrderNumber] || { draft: 0, other: 0, post: 0 };
+    var h = hrs_(t.ActivityDuration), x = by[t.WorkOrderNumber] = by[t.WorkOrderNumber] || { draft: 0, other: 0 };
     if (kind === 'drafting') x.draft += h; else x.other += h;
-    if (POST_FAB_RX.test(String(t.LaborItemName || '').toUpperCase())) x.post += h;
   });
   return by;
 }
 
-/** Actual hours from timesheets (woHours_); planned hours from Innergy job costing. */
-function labor_(woCost, booked) {
-  booked = booked || { draft: 0, other: 0, post: 0 };
-  var out = { draftAct: booked.draft, prodAct: booked.other, plan: 0, postPlan: 0, postAct: booked.post };
-  ((woCost && woCost.LaborItems) || []).forEach(function (li) {
-    if (li.JobCosting !== 'Cost To Project') return;
-    var p = hrs_(li.PlannedHours);
-    out.plan += p;
-    if (POST_FAB_RX.test((li.Name || '').toUpperCase())) out.postPlan += p;
-  });
-  return out;
+/** Actual hours booked to a WO (from woHours_). Innergy planned hours are never used (owner decision, 2026-11-10). */
+function labor_(booked) {
+  booked = booked || { draft: 0, other: 0 };
+  return { draftAct: booked.draft, prodAct: booked.other };
 }
 
 function addDays_(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -291,7 +280,6 @@ function build(raw, opts) {
     var job = m[1] || extra;
     if ((S.exclude_jobs || {})[job]) { SKIPPED.push(det.Name + ' (' + S.exclude_jobs[job] + ')'); return; }
     var dates = {}; ((d.dates && d.dates.WorkOrders) || []).forEach(function (w) { dates[suffix_(w.Number)] = w; });
-    var cost = {}; (d.costing || []).forEach(function (b) { (b.WorkOrders || []).forEach(function (w) { cost[suffix_(w.Number)] = w; }); });
     var overrides = (S.value_overrides || {})[job] || {}, instShare = (S.install_included_jobs || {})[job] || 0;
     var ph = (S.critical_placeholders || {})[job];
     var INST = [], PROD = [];
@@ -322,7 +310,7 @@ function build(raw, opts) {
       if (w.Type !== 'Production') return;
       var si = /^\d\d/.test(step) ? +step.slice(0, 2) + 1 : 1;
       var steps = stepsRaw && stepsRaw.length === 7 ? stepsRaw.map(function (s) { return [d10_(s.TargetDate) || '', d10_(s.ActualDate) || '']; }) : null;
-      var L = labor_(cost[n], BOOKED[w.Number]), price = val_(w.GrandTotalPrice), ov = overrides[n];
+      var L = labor_(BOOKED[w.Number]), price = val_(w.GrandTotalPrice), ov = overrides[n];
       var value = ov != null ? ov : price, po = poByWo[w.Number] || 0;
       var shopValue = value * (1 - instShare), reserve = shopValue * S.material_reserve_pct;
       var budget = Math.max(shopValue * S.cogs_labor_pct - Math.max(reserve, po), 0);
@@ -334,9 +322,8 @@ function build(raw, opts) {
       if (kb && kb.ord >= 4 && fc.remH > 0) { fc.capped = { formula: fc.remH, src: 'finishing complete on the kanban' }; fc.remH = 0; }
       var pastFab = kb ? kb.ord >= 3 : si >= 5;
       if (pastFab && fc.remH > 0) {
-        var left = Math.max(L.postPlan - L.postAct, 0), share = S.post_fab_fallback_share || 0.15;
-        var capH = L.postPlan > 0 ? left : fc.budgetH * share;
-        if (capH < fc.remH) { fc.capped = { formula: fc.remH, src: L.postPlan > 0 ? 'finishing + staging hrs left' : Math.round(share * 100) + '% of budget' }; fc.remH = capH; }
+        var share = S.post_fab_fallback_share, capH = fc.budgetH * share;
+        if (capH < fc.remH) { fc.capped = { formula: fc.remH, src: Math.round(share * 100) + '% of budget' }; fc.remH = capH; }
       }
       var osd = ((S.outsourced || {})[job] || {})[n];
       if (osd) { fc.capped = { formula: fc.remH, src: 'outsourced' }; fc.remH = (kb && kb.ord >= 3) ? 0 : (osd.shop_hrs || 0); }  // made outside; SP only does the listed scope
@@ -344,7 +331,7 @@ function build(raw, opts) {
       if (ph && cd === ph.from) { cdPh = cd; cd = ph.to; }
       PROD.push({ n: n, name: tidy_(w.Name), si: si, step: step.slice(5) || '?', sd: sd, ps: d10_(w.PlannedStartDate), 'as': d10_(w.ActualStartDate),
         cd: cd, sa: steps ? (steps[5][1] || null) : null, sx: addDays_(TODAY, -sd), shipped: d10_(w.ActualShipmentDate),
-        rem: hrs_(w.RemainingHours), plan: L.plan || null, act: hrs_(w.ActualLaborHours), price: price, cost: val_(w.ActualCost),
+        act: hrs_(w.ActualLaborHours), price: price, cost: val_(w.ActualCost),
         steps: steps, fc: fc, nonshop: nonshopRx.test((w.Name || '').toUpperCase()), kb: kb, cdPlaceholder: cdPh, outsourced: osd ? (osd.scope || 'Outsourced') : null });
     });
     if (!PROD.length) { SKIPPED.push(det.Name); return; }

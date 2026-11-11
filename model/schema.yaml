@@ -70,8 +70,6 @@ assumptions:
   flags.burn_high:                 { type: share,  used_by: [margin-board], description: "High flag when budget used runs this far ahead of progress (share points)" }
   flags.burn_medium:               { type: share,  used_by: [margin-board], description: "Medium flag when budget used runs this far ahead of progress (share points)" }
   flags.cash_ahead:                { type: share,  used_by: [margin-board], description: "Medium flag when spent share runs this far ahead of invoiced share" }
-  flags.planned_stale_ratio:       { type: number, used_by: [margin-board], description: "Innergy planned hours are stale when hours logged exceed planned by this factor" }
-  board.planned_highlight_min_hours: { type: number, used_by: [margin-board], description: "Work-order actuals over planned are highlighted only past this many hours" }
   billing.co_gap_share:            { type: share,  used_by: [margin-board], description: "Billing vs Innergy value gap flagged when also over this share of the value" }
   receiving.min_po:                { type: number, unit: "$", used_by: [margin-board], description: "Receiving-error check only applies to PO lines at least this large" }
   receiving.error_ratio:           { type: number, used_by: [margin-board], description: "A line received at more than this multiple of its PO amount ..." }

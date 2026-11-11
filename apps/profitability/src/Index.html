@@ -173,8 +173,8 @@ details.more summary { cursor: pointer; font-weight: 600; }
       <details class="more" id="more"><summary>Hours by department and work orders</summary>
         <div class="grid">
           <div class="card"><h3>Hours by department</h3><p class="cnote">Job hours only; PM, admin and foreman time excluded.</p><div class="bars" id="dept-bars"></div></div>
-          <div class="card"><h3>Work orders</h3><p class="cnote">Innergy's planned hours next to actuals.</p>
-            <div class="scroll" style="max-height:24rem"><table id="wo-table"><thead><tr><th>WO</th><th>Name</th><th>Stage</th><th class="num">Price</th><th class="num">Planned h</th><th class="num">Actual h</th></tr></thead><tbody></tbody></table></div></div>
+          <div class="card"><h3>Work orders</h3><p class="cnote">Price and hours booked, by work order.</p>
+            <div class="scroll" style="max-height:24rem"><table id="wo-table"><thead><tr><th>WO</th><th>Name</th><th>Stage</th><th class="num">Price</th><th class="num">Actual h</th></tr></thead><tbody></tbody></table></div></div>
         </div>
       </details>
     </div>
@@ -227,7 +227,7 @@ details.more summary { cursor: pointer; font-weight: 600; }
       <ul>
         <li>High: spent past the <span data-a="cost.cogs_share" data-f="pct"></span> line; budget used <span data-a="flags.burn_high" data-f="pts"></span>+ points ahead of progress while still under the line; spent more than has been invoiced (SP is out of pocket); spending faster than any lookback winner at the same point in the schedule; job hours per $1k above the median losing job; no job value.</li>
         <li>Medium: billing value differs from Innergy by more than <span data-a="billing.co_gap_min" data-f="usd"></span> and <span data-a="billing.co_gap_share" data-f="pct"></span> (usually change orders not entered in Innergy); spent share running <span data-a="flags.cash_ahead" data-f="pts"></span>+ points ahead of invoiced share; budget used <span data-a="flags.burn_medium" data-f="pts"></span>–<span data-a="flags.burn_high" data-f="pts"></span> points ahead of progress; job hours per $1k above anything a lookback winner used; past planned finish; still open after nearly everything shipped; a PO receiving error was corrected.</li>
-        <li>Low: invoiced but unpaid; open PO commitments; unapproved hours; Innergy planned hours stale; no drafting hours logged.</li>
+        <li>Low: invoiced but unpaid; open PO commitments; unapproved hours; no drafting hours logged.</li>
       </ul>
       <h3>Invoiced</h3>
       <p>Invoiced is paid plus open/overdue, as a share of the job value. Jobs that aren't on the billing sheet have been fully billed, so they show 100% (in grey). Paid comes from each job tab's own PTD, not from <span data-a="billing.summary_tab" data-f="text"></span>: on the tabs, "Adjusted PTD" adds paid change orders to a PTD that already includes them, so <span data-a="billing.summary_tab" data-f="text"></span> double-counts them. The Data check lists the jobs affected.</p>
@@ -523,7 +523,7 @@ function drawWOs() {
   const rows = D.work_orders.filter((w) => w.job === selected);
   document.querySelector('#wo-table tbody').replaceChildren(...rows.map((w) => {
     const tr = el('tr');
-    [[w.work_order], [w.name], [w.step], [money(w.price), 'num'], [hrsFmt(w.planned_hours), 'num'], [hrsFmt(w.actual_hours), 'num' + (w.actual_hours > A.flags.planned_stale_ratio * w.planned_hours && w.actual_hours > A.board.planned_highlight_min_hours ? ' c-warn' : '')]]
+    [[w.work_order], [w.name], [w.step], [money(w.price), 'num'], [hrsFmt(w.actual_hours), 'num']]
       .forEach(([t, c]) => tr.append(el('td', c, t)));
     return tr;
   }));

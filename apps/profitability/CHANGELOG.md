@@ -4,6 +4,7 @@ Changes to this board's code. Assumption values are logged in the SP config CHAN
 
 ## Unreleased
 
+- Innergy planned hours are never used (owner decision 2026-11-10). Planned-hours flag, job figure and WO column removed.
 - Reads every number from the shared `ASSUMPTIONS` (SP's assumptions.yaml); the page gets them from `pageData_` and has none written in. The page now lives in the repo (`src/Index.html`).
 - Output adds `lookback_excluded` (job and name of each excluded lookback job).
 - Durations read to the whole minute (seconds dropped).

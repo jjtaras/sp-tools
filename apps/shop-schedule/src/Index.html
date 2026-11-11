@@ -306,7 +306,7 @@ PJ.forEach(P=>{
     const kb=w.kb; w.where=kb?kb.where:w.step;
     w.inShop=kb?kb.ord>=1:w.si>=3; w.preFab=kb?kb.ord<2:w.si<4;
     w.stepOrd=w.si<=2?0:w.si===3?1:w.si===4?2:w.si===5?3:4;
-    const c=w.fc; w.fcH=(w.done||w.nonshop)?0:(c.vsrc==='none'?w.rem:c.remH); w.fcSrc=c.vsrc==='none'?'innergy':'forecast';
+    const c=w.fc; w.fcH=(w.done||w.nonshop)?0:(c.vsrc==='none'?0:c.remH); w.fcSrc=c.vsrc==='none'?'none':'forecast';
     if(!w.done&&w.kb&&w.kb.hold.length){}
     if(w.done){w.st='done';w.slip=w.stagedD?days(w.cdD,w.stagedD):null;w.why=''}
     else if(w.hold){w.st='hold';w.why='Project on hold'}
@@ -336,7 +336,6 @@ PJ.forEach(P=>{
   P.onHold=onHoldProj;
   P.n=k=>P.active.filter(w=>w.st===k).length;
   P.fcH=P.active.reduce((s,w)=>s+w.fcH,0);
-  P.innH=P.active.reduce((s,w)=>s+w.rem,0);
   const fut=P.active.map(w=>w.cdD).sort((a,b)=>a-b); P.nextCd=fut[0]||null;
   const cal=P.prod.filter(w=>w.done&&w.group!=='support'&&w.fc.value>0);
   P.calB=cal.reduce((s,w)=>s+w.fc.budget,0); P.calS=cal.reduce((s,w)=>s+w.fc.spent,0);
@@ -437,7 +436,7 @@ function prodRow(w){
   const sub=w.done?`${w.kbDone&&!(w.si>=6)?'Finishing complete':w.si>=7?'Delivered':'Staged'} ${w.stagedD?f(w.stagedD):'?'}${w.stagedInferred&&!w.kbDone?'*':''}${w.slip>0?` · ${w.slip}d after critical`:''}`:`${w.where}${w.kb?'':' · '+w.sd+'d'}${w.st!=='ok'?' · '+LABEL[w.st]:''}${w.cdPlaceholder?' · date is a placeholder':''}`;
   const osTag=w.outsourced?'<span class="ostag" title="'+esc(w.outsourced)+'">Outsourced</span>':'';
   const c=w.fc;
-  const facts=`<div class="facts"><span>Value <b>${c.vsrc==='none'?'none':money(c.value)}${c.vsrc==='override'?' (entered)':''}</b></span>${c.instShare?`<span>Install share <b>${Math.round(c.instShare*100)}% (${money(c.value*c.instShare)})</b> removed</span>`:''}<span>POs <b>${money(c.po)}</b></span><span>Budget <b>${hrs(c.budgetH)} h</b></span><span>Booked <b>${hrs(c.draftH)} drafting · ${hrs(c.prodH)} shop</b></span><span>Forecast left <b>${hrs(w.fcH)} h</b>${w.nonshop?' (not shop work)':w.fcSrc==='innergy'?' (Innergy)':''}</span><span>Innergy left <b>${hrs(w.rem)} h</b></span>${w.burn&&w.burn.ok?`<span>Labor burn <b>${esc(burnTip(w))}</b></span>`:''}${w.kb?`<span>Kanban <b>${Object.entries(w.kb.lanes).map(([k,v])=>({draft:'Drafting',cnc:'CNC',fab:'Fab',fin:'Finishing'}[k])+': '+esc(v)).join(' · ')}</b></span>`:''}${w.outsourced?`<span>Scope <b>${esc(w.outsourced)}</b></span>`:''}${w.projEnd&&!w.done?`<span>Projected finish <b>${f(w.projEnd)}</b> at ${ST.max_hrs_per_wo_per_day} hrs/day</span>`:''}${w.cdPlaceholder?`<span>Critical <b>${f(D(w.cdPlaceholder))} placeholder, using ${f(w.cdD)}</b></span>`:''}<span>Planned start <b>${f(D(w.ps))}</b></span>${w.shipped?`<span>Shipped <b>${f(D(w.shipped))}</b></span>`:''}</div>${c.capped?`<div class="note">${c.capped.src==='outsourced'?`Outsourced: forecast is SP's scope only, 0 once Fab is done (value rule said ${hrs(c.capped.formula)} h).`:`Past fabrication: capped at ${c.capped.src} (value rule said ${hrs(c.capped.formula)} h).`}</div>`:''}`;
+  const facts=`<div class="facts"><span>Value <b>${c.vsrc==='none'?'none':money(c.value)}${c.vsrc==='override'?' (entered)':''}</b></span>${c.instShare?`<span>Install share <b>${Math.round(c.instShare*100)}% (${money(c.value*c.instShare)})</b> removed</span>`:''}<span>POs <b>${money(c.po)}</b></span><span>Budget <b>${hrs(c.budgetH)} h</b></span><span>Booked <b>${hrs(c.draftH)} drafting · ${hrs(c.prodH)} shop</b></span><span>Forecast left <b>${hrs(w.fcH)} h</b>${w.nonshop?' (not shop work)':w.fcSrc==='none'?' (no value)':''}</span>${w.burn&&w.burn.ok?`<span>Labor burn <b>${esc(burnTip(w))}</b></span>`:''}${w.kb?`<span>Kanban <b>${Object.entries(w.kb.lanes).map(([k,v])=>({draft:'Drafting',cnc:'CNC',fab:'Fab',fin:'Finishing'}[k])+': '+esc(v)).join(' · ')}</b></span>`:''}${w.outsourced?`<span>Scope <b>${esc(w.outsourced)}</b></span>`:''}${w.projEnd&&!w.done?`<span>Projected finish <b>${f(w.projEnd)}</b> at ${ST.max_hrs_per_wo_per_day} hrs/day</span>`:''}${w.cdPlaceholder?`<span>Critical <b>${f(D(w.cdPlaceholder))} placeholder, using ${f(w.cdD)}</b></span>`:''}<span>Planned start <b>${f(D(w.ps))}</b></span>${w.shipped?`<span>Shipped <b>${f(D(w.shipped))}</b></span>`:''}</div>${c.capped?`<div class="note">${c.capped.src==='outsourced'?`Outsourced: forecast is SP's scope only, 0 once Fab is done (value rule said ${hrs(c.capped.formula)} h).`:`Past fabrication: capped at ${c.capped.src} (value rule said ${hrs(c.capped.formula)} h).`}</div>`:''}`;
   return `<div class="grow prow${w.done?' isdone':''}" data-done="${w.done}" data-support="${w.group==='support'}" data-installed="${w.installed}" tabindex="0" role="button" aria-expanded="false">
     <div class="glabel"><span class="mono" style="font-size:12px">${w.n}</span><div class="nm"><div>${esc(w.name)}</div><div class="sub">${osTag}${sub}</div></div><span class="crit">${f(w.cdD)}</span><span class="float ${w.sdays<0&&!w.done?'neg':''}">${w.done||w.hold?'':w.sdays}</span></div>
     <div class="gtrack">${GL}${mk}</div>
@@ -490,7 +489,6 @@ PJ.forEach(P=>{
   P.inst.filter(i=>!i.bucket&&i.si===1&&i.act>0).forEach(i=>add(i.n,`${hrs(i.act)} install hrs logged but step is still "${i.step}"`,'Move to Being Installed.'));
   P.prod.filter(w=>!w.installed).forEach(w=>{
     if(!w.done&&!w.kb) add(w.n,'No labor kanban items','Add labor items so the WO shows up on the kanban; until then its position comes from the WO step.');
-    if(w.si>=7&&w.rem>10) add(w.n,`Marked Delivered with ${hrs(w.rem)} remaining hrs still open`,'Clear remaining hours, or check the step.');
     if(!w.done&&w.nonshop&&w.fc.value>0) add(w.n,`Production WO named like field or shipping work (${money(w.fc.value)}); left out of shop hours`,'If it is install or freight, make it an Installation WO or an expense so it stays out of production.');
     if(!w.done&&!w.hold&&!w.nonshop&&w.fc.vsrc==='none'&&(w.inst||w.code)) add(w.n,'No WO value, so hours can\'t be forecast','Enter the value in Innergy, or add it to value_overrides in tracker_settings.json.');
     if(!w.done&&!w.hold&&!w.cd) add(w.n,'No critical date','Set the staged-by date.');
@@ -523,7 +521,7 @@ function render(){
   A.forEach(w=>w.load.forEach((h,k)=>{load[k]+=h;if(w.st==='late'||w.st==='risk')loadR[k]+=h}));
   const late=A.filter(w=>w.st==='late'),risk=A.filter(w=>w.st==='risk');
   const due5=A.filter(w=>w.sdays>=0&&w.sdays<=ASM.schedule.due_soon_shop_days);
-  const fcT=A.reduce((s,w)=>s+w.fcH,0), inT=A.reduce((s,w)=>s+w.rem,0);
+  const fcT=A.reduce((s,w)=>s+w.fcH,0);
   document.getElementById('stats').innerHTML=[
     [A.length,'Open production WOs',''],[late.length,'Late (past critical, not staged)',late.length?'late':''],[risk.length,'At risk',risk.length?'risk':''],
     [due5.length,`Due staged in the next ${ASM.schedule.due_soon_shop_days} shop days`,''],
@@ -536,7 +534,7 @@ function render(){
   if(CAP) rf.push(`<p><b>Capacity:</b> ${over.length?`forecast work is over ${CAP} hrs in ${over.length} of the next ${NW} weeks (${over.map(x=>{const d=new Date(W0);d.setDate(d.getDate()+x.k*7);return `${f(d)}: ${hr0(x.h)}`}).join(', ')}).`:`no week in the next ${NW} goes over ${CAP} hrs; peak is ${hr0(Math.max(...load))} hrs.`} This counts only work that has a critical date ahead of it, so later weeks fill in as jobs get dated.</p>`);
   if(late.length){const by={};late.forEach(w=>(by[jobLabel(w.P)]=(by[jobLabel(w.P)]||0)+1));rf.push(`<p><b>Late:</b> ${late.length} WOs across ${Object.keys(by).length} jobs (${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)} ${v}`).join(', ')}).</p>`)}
   const novalue=A.filter(w=>w.fc.vsrc==='none'&&(w.inst||w.code)&&!w.nonshop);
-  if(novalue.length) rf.push(`<p><b>No WO value:</b> ${novalue.length} open WOs have a $0 price, so their hours come from Innergy instead of the value rule. They're on the fix list.</p>`);
+  if(novalue.length) rf.push(`<p><b>No WO value:</b> ${novalue.length} open WOs have a $0 price, so they have no forecast hours until a value is entered. They're on the fix list.</p>`);
   (document.getElementById('readfirst')||{}).innerHTML=rf.join('');
   // load chart
   const mx=Math.max(...load,CAP,1),LH=150;

@@ -353,7 +353,6 @@ function buildBoard(raw, asOf) {
       po_received: Math.round(a.poRec), po_open: Math.round(a.poOpen),
       po_receiving_errors: a.poFixed.length, po_receiving_error_detail: a.poFixed.join('; '),
       drafting_progress: Math.round(dp * 1000) / 1000, shop_progress: Math.round(sp * 1000) / 1000,
-      innergy_planned_hours: round1(W.reduce(function (s, w) { return s + (w.PlannedLaborDuration ? w.PlannedLaborDuration.ticks : 0); }, 0) / 36e9),
       first_hours_logged: a.first, last_hours_logged: a.last, schedule_start: weeks[0] || '',
       planned_finish: ships.length ? ships[ships.length - 1] : (p.SubstantialCompletion || ''),
       work_orders: W.length,
@@ -415,7 +414,7 @@ function buildBoard(raw, asOf) {
       .forEach(function (k) { depts.push({job: j.job, department: k, hours: round1(j._acc.dept[k])}); });
     j._wos.forEach(function (w) {
       wos.push({job: j.job, work_order: w.SequenceIdentifier.DisplayName, name: w.Name.DisplayName, step: w.WorkflowStepName,
-        price: Math.round(val(w.GrandTotalPrice)), planned_hours: round1((w.PlannedLaborDuration ? w.PlannedLaborDuration.ticks : 0) / 36e9),
+        price: Math.round(val(w.GrandTotalPrice)),
         actual_hours: round1((w.ActualLaborDuration ? w.ActualLaborDuration.ticks : 0) / 36e9)});
     });
   });
@@ -533,8 +532,6 @@ function flagsFor(jobs, outlook, lb) {
     if (+j.po_receiving_errors > 0) add(j.job, 'receiving', 'medium', 'PO receiving error corrected', j.po_receiving_error_detail + '; fix the receipt in Innergy');
     if (+j.po_open > 0) add(j.job, 'po', 'low', 'Open PO commitments', usd(+j.po_open) + ' ordered, not yet received (included in cost)');
     if (+j.unapproved_hours > 0) add(j.job, 'pending', 'low', 'Unapproved hours', Math.round(+j.unapproved_hours) + ' hrs not yet approved (included in cost)');
-    var hrs = +j.drafting_hours + +j.shop_hours;
-    if (+j.innergy_planned_hours > 0 && hrs > CONFIG.PLANNED_STALE_RATIO * +j.innergy_planned_hours) add(j.job, 'planned', 'low', 'Innergy planned hours are stale', Math.round(hrs).toLocaleString('en-US') + ' hrs logged vs ' + Math.round(+j.innergy_planned_hours).toLocaleString('en-US') + ' planned');
     if (+j.drafting_hours === 0 && !j.drafting_note && +j.drafting_progress >= 0.5) add(j.job, 'nodraft', 'low', 'No drafting hours logged', 'Drafting time is probably landing on another job or overhead');
   });
   return out;
