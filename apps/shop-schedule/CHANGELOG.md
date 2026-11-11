@@ -2,6 +2,11 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.1.0 (2026-11-10)
+
+- New "Bottlenecks by area" section: weekly forecast hours for CNC, fab and finishing against each area's capacity, plus drafting for reference. Hours are split by the phase shares over the phases each WO has ahead, worked in order. Amber/red over 85% / 100%, with a summary of which areas go over and when.
+- `shop_crew` is now the sum of `shop.crew_by_phase`.
+
 ## 1.0.1 (2026-11-10)
 
 Shop capacity 22 × 40 = 880 h/week (was 840). Config change only.

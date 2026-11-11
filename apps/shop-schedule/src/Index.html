@@ -121,6 +121,14 @@ details[open] .chev{transform:rotate(45deg)}
 .prow.flash{animation:flash 1.6s ease-out}
 .beyond{position:absolute;right:4px;top:50%;transform:translateY(-50%);font-family:var(--f-mono);font-size:11px;color:var(--muted);background:var(--panel);padding:0 3px;z-index:1;white-space:nowrap}
 @keyframes flash{0%{background:var(--accent-soft)}100%{background:transparent}}
+.bn td,.bn th{padding:6px 8px;white-space:nowrap}
+.bn td.num{font-family:var(--f-mono);font-size:12px}
+.bn td.num small{display:block;font-size:10px;color:var(--muted)}
+.bn td.risk{background:var(--risk-soft);color:var(--risk)} .bn td.risk small{color:var(--risk)}
+.bn td.late{background:var(--late-soft);color:var(--late);font-weight:600} .bn td.late small{color:var(--late)}
+.bn td.area{position:sticky;left:0;background:var(--panel);min-width:150px}
+.bn td.area b{display:block;font-family:var(--f-display);font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+.bn td.area small{color:var(--muted);font-size:11.5px}
 @media (max-width:760px){details.proj>summary{grid-template-columns:20px 1fr auto}details.proj>summary .pm,details.proj>summary .pills{display:none}}
 </style>
 
@@ -146,6 +154,12 @@ details[open] .chev{transform:rotate(45deg)}
   <section>
     <div class="sechead"><h2>Shop load by week</h2><p id="loadsub"></p></div>
     <div class="tablewrap"><div class="load" id="load" ></div></div>
+  </section>
+
+  <section>
+    <div class="sechead"><h2>Bottlenecks by area</h2><p id="bnsub"></p></div>
+    <div class="readfirst" id="bnsum"></div>
+    <div class="tablewrap"><table class="bn" id="bneck"></table></div>
   </section>
 
   <section id="schedule">
@@ -280,6 +294,7 @@ PJ.forEach(P=>P.prod.forEach(w=>{
   const ph=PHO.filter(p=>has[p]), tot=ph.reduce((s,p)=>s+PHW[p],0); let c=0; const bands={};
   ph.forEach(p=>{bands[p]=[c/tot,(c+PHW[p])/tot];c+=PHW[p]});
   const stg=ord>=4?null:(PHO[ord]&&has[PHO[ord]]?PHO[ord]:ph.find(p=>PHO.indexOf(p)>=ord)||null);
+  w.ph=ph; w.ord=ord;
   const b=w.fc.budget, sp=w.fc.spent;
   w.burn={ok:b>0, pct:b>0?sp/b:null, band:w.done||!stg?null:bands[stg], stg, phases:ph, sp, b};
   const B=w.burn;
@@ -308,14 +323,21 @@ const W0=monday(TODAY), NW=ST.load_weeks;
 ACTIVE.forEach(w=>{
   // Spread each WO's forecast hours evenly over the shop days it has before its critical date, at no more than
   // max_hrs_per_wo_per_day (crew that can work one WO). Hours that don't fit run past the critical date at that limit (w.projEnd).
-  w.load=new Array(NW).fill(0); w.projEnd=null; if(!(w.fcH>0)) return;
+  w.load=new Array(NW).fill(0); w.projEnd=null;
+  w.loadP=Object.fromEntries(PHO.map(p=>[p,new Array(NW).fill(0)]));
+  if(!(w.fcH>0)) return;
+  // Bottlenecks: the WO's hours by area, from the phase shares of the phases it still has ahead (current one included),
+  // worked in order: drafting, CNC, fab, finishing. Each day's hours go to the earliest area with hours left.
+  const rem=(w.ph||PHO).filter(p=>PHO.indexOf(p)>=(w.ord||0)), rt=rem.reduce((s,p)=>s+PHW[p],0);
+  const q=rem.map(p=>[p,rt?w.fcH*PHW[p]/rt:0]);
   const capD=ST.max_hrs_per_wo_per_day, start=new Date(Math.max(TODAY,W0));
   // Not in the shop yet: start at its Innergy planned start, pulled earlier (never before today) if needed to finish by critical at the daily limit.
   let s=new Date(start); const ps=D(w.ps);
   if(!w.inShop&&ps&&ps>s&&ps<w.cdD){const need=Math.ceil(w.fcH/capD);let x=new Date(w.cdD),n=0;
     while(n<need-1&&x>s){x.setDate(x.getDate()-1);const g=x.getDay();if(g&&g<6)n++}
     s=new Date(Math.max(+s,Math.min(+ps,+x)));}
-  const put=(x,h)=>{const k=Math.floor(days(W0,x)/7);if(k>=0&&k<NW)w.load[k]+=h};
+  const put=(x,h)=>{const k=Math.floor(days(W0,x)/7);if(k>=0&&k<NW)w.load[k]+=h;
+    let r=h;while(r>1e-9&&q.length){const t=Math.min(r,q[0][1]);if(k>=0&&k<NW)w.loadP[q[0][0]][k]+=t;q[0][1]-=t;r-=t;if(q[0][1]<=1e-9)q.shift()}};
   const win=[];for(const x=new Date(s);x<=w.cdD;x.setDate(x.getDate()+1)){const g=x.getDay();if(g&&g<6)win.push(new Date(x))}
   let left=w.fcH; const per=win.length?Math.min(left/win.length,capD):0, last=win.length?win[win.length-1]:null;
   win.forEach(x=>{const h=Math.min(per,left);put(x,h);left-=h});
@@ -463,6 +485,23 @@ function render(){
   if(late.length){const by={};late.forEach(w=>(by[jobLabel(w.P)]=(by[jobLabel(w.P)]||0)+1));rf.push(`<p><b>Late:</b> ${late.length} WOs across ${Object.keys(by).length} jobs (${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)} ${v}`).join(', ')}).</p>`)}
   const novalue=A.filter(w=>w.fc.vsrc==='none'&&(w.inst||w.code)&&!w.nonshop);
   if(novalue.length) rf.push(`<p><b>No WO value:</b> ${novalue.length} open WOs have a $0 price, so they have no forecast hours until a value is entered. They're on the fix list.</p>`);
+  // bottlenecks by area
+  const loadP=Object.fromEntries(PHO.map(p=>[p,new Array(NW).fill(0)]));
+  A.forEach(w=>PHO.forEach(p=>w.loadP[p].forEach((h,k)=>{loadP[p][k]+=h})));
+  const CREW=ASM.shop.crew_by_phase, AREA={cnc:'cnc',fab:'fab',fin:'finishing'};
+  const areaCap=p=>AREA[p]&&CREW[AREA[p]]?CREW[AREA[p]]*ST.hours_per_week:0;
+  const lvl=(h,c)=>!c||!h?'':h>c?'late':h>c*ASM.shop.capacity_warn_share?'risk':'';
+  const bnSum=[];
+  ['fin','fab','cnc'].forEach(p=>{const c=areaCap(p);if(!c)return;const over=loadP[p].map((h,k)=>({h,k})).filter(x=>x.h>c);
+    if(over.length){const pk=over.reduce((m,x)=>x.h>m.h?x:m);const d=new Date(W0);d.setDate(d.getDate()+pk.k*7);
+      bnSum.push(`${PHN[p]} over capacity in ${over.length} of the next ${NW} weeks (peak ${Math.round(pk.h/c*100)}%, week of ${f(d)})`)}});
+  (document.getElementById('bnsum')||{}).innerHTML=`<p><b>${bnSum.length?bnSum.join('. ')+'.':'Every area is within capacity for the next '+NW+' weeks.'}</b></p>`;
+  const wkd=k=>{const d=new Date(W0);d.setDate(d.getDate()+k*7);return d};
+  (document.getElementById('bnsub')||{}).textContent=`Forecast hours each week by area, against that area's capacity (people × ${ST.hours_per_week} hrs). Each WO's hours are split by the phase shares (CNC ${PHW.cnc}, fab ${PHW.fab}, finishing ${PHW.fin} of every ${PHW.draft+PHW.cnc+PHW.fab+PHW.fin}) for the phases it still has ahead, worked in order. Drafting is shown for reference; drafters aren't in the shop crew. Amber = over ${Math.round(ASM.shop.capacity_warn_share*100)}% of capacity, red = over capacity.`;
+  (document.getElementById('bneck')||{}).innerHTML=`<thead><tr><th>Area</th>${loadP.fab.map((_,k)=>`<th class="num">${f(wkd(k))}</th>`).join('')}</tr></thead><tbody>`+
+    ['cnc','fab','fin','draft'].map(p=>{const c=areaCap(p),ppl=AREA[p]?CREW[AREA[p]]:null;
+      return `<tr><td class="area"><b>${PHN[p]}</b><small>${c?`${ppl} people · ${hr0(c)} hrs/wk`:'not in shop capacity'}</small></td>`+
+        loadP[p].map(h=>`<td class="num ${lvl(h,c)}">${h>=0.5?hr0(h):'·'}${c&&h>=0.5?`<small>${Math.round(h/c*100)}%</small>`:''}</td>`).join('')+'</tr>'}).join('')+'</tbody>';
   (document.getElementById('readfirst')||{}).innerHTML=rf.join('');
   // load chart
   const mx=Math.max(...load,CAP,1),LH=150;

@@ -3,7 +3,7 @@
  * Change values in assumptions.yaml and redeploy; only names map here.
  * cogs_labor_pct / material_reserve_pct: labor budget = cogs_labor_pct x WO value - max(material_reserve_pct x value, POs on the WO)
  * rate_drafting / rate_production: $/hr used to cost booked hours and convert the budget to shop hours
- * shop_crew x hours_per_week = weekly capacity line
+ * shop_crew x hours_per_week = weekly capacity line; shop_crew is the sum of shop.crew_by_phase
  * exclude_jobs: job number -> reason, left off the tracker. hold_jobs: shown as on hold, out of counts and load.
  * value_overrides: job -> WO suffix -> value to use when the Innergy price is $0 or wrong.
  * install_included_jobs: job -> share of each WO's value that is installation (taken off before the value rule).
@@ -21,7 +21,7 @@ var SETTINGS = (function (A) {
     material_reserve_pct: A.shop.material_reserve_share,
     rate_drafting: A.labor.rate_drafting,
     rate_production: A.labor.rate_other,
-    shop_crew: A.shop.crew,
+    shop_crew: Object.keys(A.shop.crew_by_phase).reduce(function (s, k) { return s + A.shop.crew_by_phase[k]; }, 0),
     hours_per_week: A.shop.hours_per_week,
     post_fab_fallback_share: A.shop.post_fab_fallback_share,
     value_overrides: J.value_overrides,

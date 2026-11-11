@@ -2,6 +2,10 @@
 
 Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGELOG.md`, and assumption changes go in the SP config CHANGELOG.
 
+## 1.1.0 (2026-11-10)
+
+- Assumptions: `shop.crew_by_phase` (cnc / fab / finishing) replaces `shop.crew`; the total is unchanged.
+
 ## 1.0.1 (2026-11-10)
 
 Config-only release: `shop.crew` 21 → 22 in assumptions.yaml (6 finishers). No code changes.

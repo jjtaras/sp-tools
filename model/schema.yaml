@@ -33,7 +33,7 @@ assumptions:
 
   # ---- shop capacity and the shop-hours predictor (Production Tracker)
   shop.material_reserve_share:     { type: share,  used_by: [production-tracker], description: "Materials reserve; the value rule takes off the greater of this share or POs on the WO" }
-  shop.crew:                       { type: number, used_by: [production-tracker], description: "People counted in shop capacity" }
+  shop.crew_by_phase:              { type: map<number>, used_by: [production-tracker], description: "People in each shop area (cnc, fab, finishing). Total shop capacity is their sum; each area's capacity is its people x hours_per_week" }
   shop.hours_per_week:             { type: number, used_by: [production-tracker], description: "Hours per person per week; crew x this = weekly capacity" }
   shop.post_fab_fallback_share:    { type: share,  used_by: [production-tracker], description: "Past fabrication with no finishing/staging plan, remaining hours are capped at this share of the WO's budget" }
   shop.max_hours_per_wo_per_day:   { type: number, used_by: [production-tracker], description: "Work not yet in the shop is scheduled as late as possible at this rate per WO" }
