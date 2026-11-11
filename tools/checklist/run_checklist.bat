@@ -31,27 +31,35 @@ echo   ===============================================
 echo.
 
 REM --- inputs ------------------------------------------------------
-set /p WO=  Work order number (e.g. P-26-1007-018p):
-if "%WO%"=="" ( echo   No work order given. Nothing to do. & pause & exit /b 1 )
+REM Drag-and-drop wraps paths in quotes. Strip them straight after each answer and test with
+REM !VAR! (only when an answer was given; on an empty one the substitution leaves junk): a quoted path with spaces inside if "%VAR%"=="" is a syntax error that closes the window.
+set WO=
+set /p WO=  Work order number (e.g. P-26-1007-018p): 
+if defined WO set "WO=!WO:"=!"
+if "!WO!"=="" ( echo   No work order given. Nothing to do. & pause & exit /b 1 )
 
 echo.
 echo   Drag the RECSET shop drawing PDF into this window, then press Enter.
 echo   (Leave blank to skip - materials and Drawn By will be left empty.)
-set /p RECSET=  RECSET:
+set RECSET=
+set /p RECSET=  RECSET: 
+if defined RECSET set "RECSET=!RECSET:"=!"
 
 echo.
 echo   Drag the job's 04_PRODUCTION folder into this window, then press Enter.
-set /p OUT=  Output folder:
-if "%OUT%"=="" ( echo   No output folder given. Nothing to do. & pause & exit /b 1 )
+set OUT=
+set /p OUT=  Output folder: 
+if defined OUT set "OUT=!OUT:"=!"
+if "!OUT!"=="" ( echo   No output folder given. Nothing to do. & pause & exit /b 1 )
 
-echo.
-set /p VIF=  VIF - who verified in field (Enter for the SP default):
+REM VIF and engineering sign-off: numbered lists from SP's checklist/settings.json ("choices").
+set VIF=
+%PY% "%~dp0pick_person.py" vif "%TEMP%\sp_vif.txt" || ( echo   Could not read the names list. & pause & exit /b 1 )
+set /p VIF=<"%TEMP%\sp_vif.txt"
 
-set /p ENG=  Engineering sign off (Enter for the SP default):
-
-REM --- strip quotes that drag-and-drop adds ------------------------
-set RECSET=!RECSET:"=!
-set OUT=!OUT:"=!
+set ENG=
+%PY% "%~dp0pick_person.py" eng_signoff "%TEMP%\sp_eng.txt" || ( echo   Could not read the names list. & pause & exit /b 1 )
+set /p ENG=<"%TEMP%\sp_eng.txt"
 
 REM --- write the intake file ---------------------------------------
 > "%TEMP%\sp_intake.json" echo {"vif": "!VIF!", "eng_signoff": "!ENG!"}
@@ -61,9 +69,9 @@ echo.
 echo   Working...
 echo.
 if "!RECSET!"=="" (
-  %PY% "%~dp0make_checklist.py" "%WO%" --intake "%TEMP%\sp_intake.json" --out "!OUT!"
+  %PY% "%~dp0make_checklist.py" "!WO!" --intake "%TEMP%\sp_intake.json" --out "!OUT!"
 ) else (
-  %PY% "%~dp0make_checklist.py" "%WO%" --recset "!RECSET!" --intake "%TEMP%\sp_intake.json" --out "!OUT!"
+  %PY% "%~dp0make_checklist.py" "!WO!" --recset "!RECSET!" --intake "%TEMP%\sp_intake.json" --out "!OUT!"
 )
 
 if errorlevel 1 (

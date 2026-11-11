@@ -30,7 +30,10 @@ python make_checklist.py P-26-1007-004p --recset RECSET.pdf --model "<working mo
 `--model` fills the CNC part count from the Rhino working model (see "Part count" below).
 
 On Windows, double-click `run_checklist.bat`. It asks for the work order, the RECSET and the
-output folder; blank VIF / engineering sign-off take SP's defaults from `settings.json`.
+output folder (drag files and folders in; paths with spaces are fine), then offers numbered lists
+for VIF and Engineering Sign Off (`pick_person.py`). The lists are `choices` in SP's
+`checklist/settings.json`. Enter takes the default: for VIF that's the PM running the tool
+(`CHECKLIST_USER` in the PC's `.env`), for engineering `defaults.eng_signoff`.
 
 | File | What it does |
 |---|---|
