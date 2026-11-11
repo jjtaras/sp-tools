@@ -63,3 +63,26 @@ def settings():
 def innergy():
     """(base_url, api_key) for Innergy."""
     return os.environ.get("INNERGY_BASE_URL", "https://app.innergy.com"), require_env("INNERGY_API_KEY")
+
+
+def jobs_dir():
+    """SP's ACTIVE JOBS folder in Dropbox, or None.
+
+    SP_JOBS_DIR in .env wins. Otherwise the usual Dropbox spots under the user's home: Windows
+    'STUDIO PRACTICE Dropbox', Mac '~/Library/CloudStorage/Dropbox-*'. Old '(Old)' copies are skipped.
+    """
+    explicit = os.environ.get("SP_JOBS_DIR")
+    if explicit:
+        if not os.path.isdir(explicit):
+            raise SystemExit(f"SP_JOBS_DIR does not exist or is not a folder: {explicit}")
+        return explicit
+    import glob
+    home = os.path.expanduser("~")
+    for root in sorted(glob.glob(os.path.join(home, "*Dropbox*")) +
+                       glob.glob(os.path.join(home, "Library", "CloudStorage", "Dropbox*"))):
+        if "(old)" in root.lower():
+            continue
+        path = os.path.join(root, "SP PROJECTS", "ACTIVE JOBS")
+        if os.path.isdir(path):
+            return path
+    return None

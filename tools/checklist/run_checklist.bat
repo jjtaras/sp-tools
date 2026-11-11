@@ -38,18 +38,36 @@ set /p WO=  Work order number (e.g. P-26-1007-018p):
 if defined WO set "WO=!WO:"=!"
 if "!WO!"=="" ( echo   No work order given. Nothing to do. & pause & exit /b 1 )
 
+REM Find the RECSET and the job's 04_PRODUCTION folder from the WO (find_recset.py). Anything it
+REM can't find, or the PM wants to change, is asked for: drag a file or folder in.
 echo.
-echo   Drag the RECSET shop drawing PDF into this window, then press Enter.
-echo   (Leave blank to skip - materials and Drawn By will be left empty.)
+echo   Looking up the work order...
 set RECSET=
-set /p RECSET=  RECSET: 
-if defined RECSET set "RECSET=!RECSET:"=!"
+set OUT=
+type nul > "%TEMP%\sp_recset.txt"
+type nul > "%TEMP%\sp_out.txt"
+%PY% "%~dp0find_recset.py" "!WO!" "%TEMP%\sp_recset.txt" "%TEMP%\sp_out.txt" || ( echo   Could not look up the work order - see the message above. & pause & exit /b 1 )
+set /p RECSET=<"%TEMP%\sp_recset.txt"
+set /p OUT=<"%TEMP%\sp_out.txt"
 
 echo.
-echo   Drag the job's 04_PRODUCTION folder into this window, then press Enter.
-set OUT=
-set /p OUT=  Output folder: 
-if defined OUT set "OUT=!OUT:"=!"
+if defined RECSET (
+  echo   Press Enter to use that RECSET, or drag a different one into this window.
+) else (
+  echo   Drag the RECSET shop drawing PDF into this window, then press Enter.
+  echo   ^(Leave blank to skip - materials, finishes and Drawn By will be left empty.^)
+)
+set OTHER=
+set /p OTHER=  RECSET: 
+if defined OTHER set "OTHER=!OTHER:"=!"
+if defined OTHER set "RECSET=!OTHER!"
+
+if not defined OUT (
+  echo.
+  echo   Drag the job's 04_PRODUCTION folder into this window, then press Enter.
+  set /p OUT=  Output folder: 
+  if defined OUT set "OUT=!OUT:"=!"
+)
 if "!OUT!"=="" ( echo   No output folder given. Nothing to do. & pause & exit /b 1 )
 
 REM VIF and engineering sign-off: numbered lists from SP's checklist/settings.json ("choices").

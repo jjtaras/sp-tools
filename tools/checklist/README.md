@@ -29,11 +29,33 @@ python make_checklist.py P-26-1007-004p --recset RECSET.pdf --model "<working mo
 
 `--model` fills the CNC part count from the Rhino working model (see "Part count" below).
 
-On Windows, double-click `run_checklist.bat`. It asks for the work order, the RECSET and the
-output folder (drag files and folders in; paths with spaces are fine), then offers numbered lists
-for VIF and Engineering Sign Off (`pick_person.py`). The lists are `choices` in SP's
-`checklist/settings.json`. Enter takes the default: for VIF that's the PM running the tool
-(`CHECKLIST_USER` in the PC's `.env`), for engineering `defaults.eng_signoff`.
+On Windows, double-click `run_checklist.bat`. It asks for the work order, then finds the RECSET and
+the job's `04_PRODUCTION` folder itself (`find_recset.py`) and shows what it found: Enter accepts,
+or drag a different file in. Whatever it can't find it asks for (drag files and folders in; paths
+with spaces are fine). Then numbered lists for VIF and Engineering Sign Off (`pick_person.py`). The
+lists are `choices` in SP's `checklist/settings.json`. Enter takes the default: for VIF that's the PM
+running the tool (`CHECKLIST_USER` in the PC's `.env`), for engineering `defaults.eng_signoff`.
+
+The generator never overwrites: if the job already has a checklist for that WO, the new one is
+`… - Production Checklist (2).pdf`, with a warning.
+
+### Finding the RECSET
+
+SP's naming (drafting SOP, 2026-11-11): `[WO number]_{job#}_{job name}_FX{room}{fixture}_{fixture name}_{rev}_RECSET`,
+e.g. `[P-26-1007-016p]_1517_THINK 1165 PARK_FX11601_HIS DRESSING_05_RECSET.pdf`.
+
+Innergy gives the job (the project name starts with the job number) and the room (WO names start
+with it: `[116_HIS DRESSING ROOM]`). In the job's Dropbox folder, `find_recset.py` collects RECSETs
+carrying the WO number or the room's FX code (else sharing words with the WO name), skipping
+archive and redline folders; copies of one drawing collapse to the best (04_PRODUCTION / record
+set, then approved, then internal review; higher revision; newest). It takes a file on its own only
+when one clearly wins: every word of the WO name in the file name, a WO-tagged file if there is
+one, and a better name fit or folder than the next. Otherwise the PM picks from a list, and the
+pick is remembered per WO (`~/.sp-tools/recset_picks.json`). `py find_recset.py <WO>` shows what it
+would pick. The jobs folder is found under the user's home, or set `SP_JOBS_DIR`.
+
+Checked 2026-11-11 on 16 WOs (1504, 1516, 1517, 1519): 14 picked right on their own; 105 Kitchen
+asks (its only `[005p]` file is the range hood drawing), 1519 MW01 asks (no RECSET of its own).
 
 | File | What it does |
 |---|---|
@@ -44,6 +66,8 @@ for VIF and Engineering Sign Off (`pick_person.py`). The lists are `choices` in 
 | `measure.py` | Cabinet part area from a Rhino model, with duplicate-copy removal. |
 | `nest.py` | MaxRects nester. Sheet counts from a Rhino model. |
 | `sp_config.py` | Finds `.env` and SP's config folder; fails loudly if anything is missing. |
+| `find_recset.py` | Finds a WO's RECSET and 04_PRODUCTION folder in SP's Dropbox. |
+| `pick_person.py` | Numbered VIF / engineering lists for the launcher. |
 | `run_checklist.bat` | Double-click wrapper for Windows. |
 
 ## The intake file

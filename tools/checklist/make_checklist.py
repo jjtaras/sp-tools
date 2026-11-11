@@ -908,6 +908,12 @@ def build(wo_number, intake, template, out_dir):
     )
     out_path = os.path.join(out_dir, fname)
     os.makedirs(out_dir, exist_ok=True)
+    # Never overwrite: an earlier sheet may have been edited or issued. Write '... (2).pdf' beside it.
+    stem, n = out_path[:-4], 2
+    while os.path.exists(out_path):
+        out_path, n = f"{stem} ({n}).pdf", n + 1
+    if n > 2:
+        warnings.append(f"A checklist for {wo['Number']} was already there; this one is {os.path.basename(out_path)}. Delete the one you don't want.")
 
     filled, overflow = fill_checklist(template, out_path, values, qr_payloads)
     qr_check = verify_qr(out_path, qr_payloads)
