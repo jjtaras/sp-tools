@@ -30,6 +30,7 @@ import qrcode
 import requests
 
 import sp_config
+import estimate as estimating
 
 try:
     import recset as recset_parser
@@ -455,7 +456,33 @@ def build(wo_number, intake, template, out_dir):
     api = Innergy()
     wo = api.work_order(wo_number)
     catalog = api.labor_catalog()
-    hours = api.planned_hours(wo["ProjectNumber"], wo["Number"])
+    warnings = []
+
+    # --- Hours: from the take-off at the signed-off rates; never Innergy planned hours ----------
+    recommendation = estimating.recommend(wo.get("Name", ""), intake.get("_recset"), intake)
+    est, rates = None, None
+    takeoff = intake.get("takeoff")
+    if takeoff:
+        rates = estimating.load_rates()
+        est = estimating.estimate(takeoff, rates, recommendation)
+        warnings += est["warnings"]
+        for key, k in (("est_cnc", "cnc"), ("est_fab", "fab"), ("est_fin", "fin")):
+            computed = estimating.round_hours(est["hours"][k])
+            if intake.get(key) is None:
+                intake[key] = computed
+            elif computed is not None and intake[key] != computed:
+                warnings.append(f"{key}: intake says {intake[key]}, take-off says {computed}. The intake value is on the sheet.")
+        basis = estimating.basis_line(est)
+        notes = list(intake.get("shop_notes") or [])
+        if basis and not any(str(n).startswith("BASIS:") for n in notes):
+            if len(notes) < len(F_SHOP_NOTES):
+                notes.append(basis)
+                intake["shop_notes"] = notes
+            else:
+                warnings.append("Shop notes are full; the basis line is only in the estimate record: " + basis)
+    for key in ("est_cnc", "est_fab", "est_fin"):
+        if intake.get(key) is None:
+            warnings.append(f"No {key}: left blank on the sheet (Innergy planned hours are never used). Add a take-off or an estimate.")
 
     wo_id = wo["Id"]
 
@@ -484,12 +511,11 @@ def build(wo_number, intake, template, out_dir):
         # Innergy's PlannedEndDate goes stale like its hours do; an intake
         # "due" (YYYY-MM-DD) wins when given.
         F_DUE: _fmt_date(intake.get("due") or wo.get("PlannedEndDate")),
-        # Innergy's planned hours are the default, but they go stale - the
-        # scullery sat at 13 planned fabrication hours for a 45-sheet kitchen.
-        # A PM estimate in the intake wins when one is given.
-        F_EST_CNC: _fmt_hours(intake["est_cnc"] if intake.get("est_cnc") is not None else hours.get(LABOR_CNC)),
-        F_EST_FAB: _fmt_hours(intake["est_fab"] if intake.get("est_fab") is not None else hours.get(LABOR_FAB)),
-        F_EST_FIN: _fmt_hours(intake["est_fin"] if intake.get("est_fin") is not None else hours.get(LABOR_FIN)),
+        # Hours come from the take-off (or a PM's explicit estimate). Innergy's planned hours are
+        # never printed: they're made up (owner decision 2026-11-10).
+        F_EST_CNC: _fmt_hours(intake.get("est_cnc")),
+        F_EST_FAB: _fmt_hours(intake.get("est_fab")),
+        F_EST_FIN: _fmt_hours(intake.get("est_fin")),
         # Innergy does not carry these - they come from the intake.
         F_DRAWN_BY: intake.get("drawn_by", ""),
         F_VIF: intake.get("vif", ""),
@@ -518,6 +544,12 @@ def build(wo_number, intake, template, out_dir):
 
     filled, overflow = fill_checklist(template, out_path, values, qr_payloads)
 
+    record_paths = []
+    if est:
+        issued = {"cnc": intake.get("est_cnc"), "fab": intake.get("est_fab"), "fin": intake.get("est_fin")}
+        record = estimating.make_record(wo, takeoff, est, rates, recommendation, issued)
+        record_paths = estimating.write_record(record, beside_pdf=out_path)
+
     return {
         "path": out_path,
         "work_order": wo["Number"],
@@ -527,7 +559,10 @@ def build(wo_number, intake, template, out_dir):
         "pm": values[F_PM],
         "due": values[F_DUE],
         "step": wo.get("Step"),
-        "hours": {k: hours.get(k) for k in (LABOR_CNC, LABOR_FAB, LABOR_FIN)},
+        "hours": {"cnc": intake.get("est_cnc"), "fab": intake.get("est_fab"), "fin": intake.get("est_fin")},
+        "build_type_recommendation": recommendation,
+        "estimate_record": record_paths,
+        "warnings": warnings,
         "qr": qr_payloads,
         "filled_fields": sorted(filled),
         # Values still too wide at the minimum readable font - shorten these.
@@ -558,6 +593,7 @@ def main():
     intake = dict(INTAKE_TEMPLATE)
     if args.recset:
         derived = intake_from_recset(args.recset, DRAFTER_NAMES)
+        intake["_recset"] = derived.get("_raw")
         for key in ("_raw", "_source", "_needs_blank_sizes"):
             derived.pop(key, None)
         intake.update({k: v for k, v in derived.items() if v})

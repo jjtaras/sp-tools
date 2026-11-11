@@ -86,6 +86,7 @@ assumptions:
   estimating.fab_rates:            { type: map<number>, unit: "h per sq ft of elevation", used_by: [estimating], description: "Fabrication hours per sq ft of elevation, by build type" }
   estimating.showpiece_multiplier: { type: number, used_by: [estimating], description: "Showpiece work (glass/muntins, wine rack, milled trim) = this × the cased rate" }
   estimating.cnc_formula:          { type: map<number>, used_by: [estimating], description: "CNC hours = base + per_part × deduplicated part count" }
+  estimating.settled_after_days:   { type: number, used_by: [estimating], description: "A work order counts for calibration once Completed in Innergy and no hours booked for this many days" }
   estimating.finish_primer_rate:   { type: number, unit: "h per sq ft of primed area", used_by: [estimating], description: "Primer-only finishing hours per sq ft of primed area (measured by finish scope)" }
 
 job_fixes:

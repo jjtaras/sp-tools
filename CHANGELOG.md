@@ -4,6 +4,11 @@ Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGE
 
 ## Unreleased
 
+- **Estimating and calibration.**
+  - `tools/checklist/estimate.py`: build-type recommendation, hours from take-off quantities at the signed-off rates, and estimate records. `make_checklist.py` uses it and never prints Innergy planned hours.
+  - `core/estimating.mjs`: shop areas, actuals per WO, the settled test (Completed + quiet N days), and rate evidence (fab by build type, showpiece multiplier, CNC formula, primer).
+  - `npm run calibrate`: compares records with live or snapshot timesheets and writes a dated report to `sp-tools-config/estimating/calibration/`.
+- Assumption `estimating.settled_after_days`.
 - `tools/checklist/`: the production checklist tool moved into the repo (Python). Settings come from `.env` and SP's `checklist/` config (people, defaults, template); the credential file is no longer used. Behavior unchanged: a regenerated checklist matched the original in 80 of 82 fields, all hours identical.
 
 ## 1.3.1 (2026-11-10)

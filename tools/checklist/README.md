@@ -54,9 +54,25 @@ Innergy's PlannedEndDate. `est_cnc` / `est_fab` / `est_fin` set the hours on the
 
 The signed-off rates are in SP's `assumptions.yaml` under `estimating.*`: fabrication hours per
 sq ft of elevation by build type, the showpiece multiplier, the CNC formula and the primer rate.
-The full basis and calibration notes are in `sp-tools-config/estimating/shop-hours-basis.md`.
-*(Next: an estimating step in this tool that applies those rates to the take-off quantities and
-saves an estimate record next to each checklist, so completed work orders can recalibrate them.)*
+The full basis is in `sp-tools-config/estimating/shop-hours-basis.md`.
+
+Put the take-off in the intake as a `takeoff` block (format at the top of `estimate.py`):
+elevations with sq ft and build type, an optional fab allowance, the deduplicated part count,
+and the primed area by finish scope. The tool then:
+
+- **recommends a build type** from the work order name, the RECSET and the intake (hinges or slides
+  → cased, CNC cut or hand cut; glass/muntins/wine → split out a showpiece elevation; dressing room
+  with drawers/locks/doors vs shelving; rods only → rod and liner; shelving only → shelf tower;
+  panels/cladding/doors → door/panel). Elevations without a build type use it, flagged to confirm;
+- **prices the hours** at the signed-off rates (an explicit `est_*` in the intake still wins, with a warning);
+- **adds a basis line** to the shop notes when there's room;
+- **writes an estimate record**: `… - Estimate.json` next to the checklist, and
+  `sp-tools-config/estimating/records/<WO>.json`. `npm run calibrate` (repo root) compares these
+  with timesheet actuals once a work order is Completed and quiet for `estimating.settled_after_days`.
+
+Hours are never taken from Innergy's planned hours: with no take-off and no estimate the sheet is
+left blank and the tool warns. `python estimate.py --takeoff t.json --name "<WO name>"` prices a
+take-off without making a checklist.
 
 Measuring an elevation: **read the scale off the sheet**, never assume; sets mix scales across
 pages. Use the printed overall dimension where there is one. Wall runs count one face;
