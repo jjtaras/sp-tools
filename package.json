@@ -1,6 +1,6 @@
 {
   "name": "sp-tools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Shop cost-model engine and the Apps Script dashboards that use it",
   "type": "module",
@@ -12,7 +12,9 @@
     "test": "node --test tests/",
     "fixture:record": "node scripts/record-fixture.mjs",
     "fixture:freeze": "node scripts/freeze-fixture.mjs",
-    "fixture:accept": "node scripts/accept-change.mjs"
+    "fixture:accept": "node scripts/accept-change.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "rollback": "node scripts/rollback.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

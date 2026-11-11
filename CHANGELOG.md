@@ -2,7 +2,14 @@
 
 Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGELOG.md`, and assumption changes go in the SP config CHANGELOG.
 
-## Unreleased
+## 1.0.0 (2026-11-10)
+
+First deploy from the sp-tools repo.
+
+### Deploy
+- `npm run deploy` (scripts/deploy.mjs): checks for a clean tree, the tag on HEAD, changelog entries and passing tests. Then it builds, pushes with a fixed file load order, creates a version and updates the live deployment. The description names the tag and the config fingerprint. Targets come from `sp-tools-config/deploy.yaml`.
+- `npm run rollback -- <app>` (scripts/rollback.mjs): pushes the baseline code and points the live deployment back at its pre-sp-tools version.
+- Margin Board data version 4 → 5 (data shape changed).
 
 ### Shared design
 - `apps/shared/design.css` + `head.html`: one look for every board, taken from the Production Tracker: fonts (Archivo, Archivo Narrow, IBM Plex Mono), colors (light and dark), header, stat strip, cards, tables, pills, filters and buttons. The build inlines it wherever a page has `<!-- @design -->`.

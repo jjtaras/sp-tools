@@ -13,7 +13,7 @@
  */
 
 
-var DATA_VERSION = 4;  // bump when the data shape changes; the page warns when it sees older data
+var DATA_VERSION = 5;  // bump when the data shape changes; the page warns when it sees older data
 
 // ---------------------------------------------------------------- web app
 function doGet() {

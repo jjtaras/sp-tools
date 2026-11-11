@@ -2,7 +2,9 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
-## Unreleased
+## 1.0.0 (2026-11-10)
+
+First deploy from the sp-tools repo (replaces the hand-edited Apps Script version).
 
 - New look: uses the shared design (the Production Tracker's fonts, colors and components). Header now reads "Studio Practice · Margins / Job Margin Board"; all data and wording otherwise unchanged.
 - Innergy planned hours are never used (owner decision 2026-11-10). Planned-hours flag, job figure and WO column removed.
