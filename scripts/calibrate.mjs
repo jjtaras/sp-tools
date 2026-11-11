@@ -64,7 +64,7 @@ const pct = (x) => (x == null ? '–' : (x >= 0 ? '+' : '') + Math.round(x * 100
 const verdict = (n, drift) => (n === 0 ? 'no settled data' : n < 3 ? `thin (${n} WO${n > 1 ? 's' : ''}); watch` : Math.abs(drift) > 0.15 ? '**review**' : 'holding');
 const L = [];
 L.push(`# Shop-hours calibration, ${asOf}`, '');
-L.push(`Data: ${source}. Assumptions ${A.hash}. ${records.length} estimate records; a work order counts once it's **Completed in Innergy with no hours for ${E.settled_after_days} days**. Actuals are timesheet hours (approved and pending), by labor item: 002 CNC, 003 Fabrication, 004 Finishing; overhead per the shared labor rules is left out. Nothing here changes a rate: that's an owner decision, logged in CHANGELOG.md.`, '');
+L.push(`Data: ${source}. Assumptions ${A.hash}. ${records.length} estimate records; a work order counts once it's **Completed or Closed in Innergy with no hours for ${E.settled_after_days} days**. Actuals are timesheet hours (approved and pending), by labor item: 002 CNC, 003 Fabrication, 004 Finishing; overhead per the shared labor rules is left out. Nothing here changes a rate: that's an owner decision, logged in CHANGELOG.md.`, '');
 const settledN = c.rows.filter((r) => r.settled).length;
 L.push(`**${settledN} of ${c.rows.length} work orders are settled.**`, '');
 L.push('## Rates', '', '| Rate | Current | Settled data says | Drift | WOs | Jobs | Read |', '|---|---|---|---|---|---|---|');
@@ -84,13 +84,14 @@ for (const r of c.rows.sort((a, b) => a.wo.localeCompare(b.wo))) {
   L.push(`| ${r.wo} | ${name} | ${(recW && recW.estimated_by) || ''} | ${r.settled ? 'yes' : 'no'} | ${r.why} | ${s(r.issued)} | ${s(r.estimate)} | ${a} | ${r.actual ? f1(r.actual.pending) : '–'} | ${Object.entries(r.exclude).map(([k, v]) => `${k}: ${v}`).join('; ') || ''} |`);
 }
 // Estimate accuracy by estimator: actual ÷ what went on the sheet, per area.
-const byEst = {};
+const byEst = {}, noHours = {};
 for (const r of c.rows) {
   const rec = records.find((x) => x.work_order === r.wo), who = (rec && rec.estimated_by) || 'unknown';
   if (!r.actual) continue;
   for (const k of ['cnc', 'fab', 'fin']) {
     const est = r.issued[k];
     if (est == null || est === 0 || r.exclude[k]) continue;
+    if (r.settled && !(r.actual[k] > 0)) { (noHours[who] ||= []).push(`${r.wo} ${k}`); continue; }  // booked elsewhere
     const g = ((byEst[who] ||= {})[r.settled ? 'settled' : 'running'] ||= { cnc: [0, 0, 0], fab: [0, 0, 0], fin: [0, 0, 0] })[k];
     g[0] += r.actual[k]; g[1] += est; g[2] += 1;
   }
@@ -101,6 +102,8 @@ const ratio = (g) => (g && g[2] ? `${(g[0] / g[1]).toFixed(2)}× (${g[2]})` : '�
 for (const [who, v] of Object.entries(byEst).sort()) {
   for (const k of ['settled', 'running']) if (v[k]) L.push(`| ${who} | ${k === 'settled' ? 'settled' : 'running (so far)'} | ${ratio(v[k].cnc)} | ${ratio(v[k].fab)} | ${ratio(v[k].fin)} |`);
 }
+const nh = Object.entries(noHours).map(([w, l]) => `${w}: ${l.join(', ')}`);
+if (nh.length) L.push('', `Left out: finished work orders with **no hours at all** in an area that was estimated (the hours were almost certainly booked to another WO). ${nh.join('; ')}.`);
 L.push('', '"Today\'s rates" is the take-off priced at the current assumptions (blank where the record has no quantities). Records come from tools/checklist; back-filled ones are marked in their source.', '');
 const outDir = path.join(configDir(), 'estimating', 'calibration');
 mkdirSync(outDir, { recursive: true });

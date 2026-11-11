@@ -35,9 +35,12 @@ export function woActuals(timesheets, rules, wos) {
 
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
-/** Settled = Completed in Innergy and no hours for `days` (the hours have stopped). */
+/** Innergy workflow statuses that mean the work order is finished. */
+export const DONE_STATUSES = ['Completed', 'Closed'];
+
+/** Settled = finished in Innergy (Completed or Closed) and no hours for `days` (the hours have stopped). */
 export function settledStatus(actual, workflowStatus, asOf, days) {
-  if (workflowStatus !== 'Completed') return { settled: false, why: `not Completed (${workflowStatus || 'unknown'})` };
+  if (!DONE_STATUSES.includes(workflowStatus)) return { settled: false, why: `not Completed (${workflowStatus || 'unknown'})` };
   if (!actual || !actual.last) return { settled: false, why: 'no hours booked' };
   const quiet = daysBetween(actual.last, asOf);
   if (quiet < days) return { settled: false, why: `hours ${quiet} days ago (needs ${days})` };
@@ -72,8 +75,9 @@ export function calibrate(records, actuals, status, rates, { asOf, settledDays }
     rows.push({ wo, name: r.name, project: r.project_number, settled: st.settled, why: st.why, issued: r.issued_hours || {},
       estimate: (r.estimate && r.estimate.hours) || {}, actual: a || null, exclude: ex });
     if (!st.settled) continue;
+    const empty = (k) => !(a[k] > 0);
     // Fabrication: a WO whose take-off is one build type, no showpiece, no allowance → a clean rate point.
-    if (!ex.fab && lines.length) {
+    if (!ex.fab && !empty('fab') && lines.length) {
       const types = new Set(lines.map((l) => l.build_type));
       const show = lines.filter((l) => l.showpiece), plain = lines.filter((l) => !l.showpiece);
       const allowance = Number(t.fab_allowance_hours || 0);
@@ -88,9 +92,9 @@ export function calibrate(records, actuals, status, rates, { asOf, settledDays }
         showPts.push({ wo, project: r.project_number, sq_ft: showSq, hours: a.fab - plainH, rate: per, cased, multiplier: per / cased });
       }
     }
-    if (!ex.cnc && t.part_count != null) cncPts.push({ wo, project: r.project_number, x: Number(t.part_count), y: a.cnc,
+    if (!ex.cnc && !empty('cnc') && t.part_count != null) cncPts.push({ wo, project: r.project_number, x: Number(t.part_count), y: a.cnc,
       predicted: rates.cnc.base + rates.cnc.per_part * Number(t.part_count) });
-    if (!ex.fin && t.primed_sq_ft != null) finPts.push({ wo, project: r.project_number, sq_ft: Number(t.primed_sq_ft), hours: a.fin, rate: a.fin / Number(t.primed_sq_ft) });
+    if (!ex.fin && !empty('fin') && t.primed_sq_ft != null) finPts.push({ wo, project: r.project_number, sq_ft: Number(t.primed_sq_ft), hours: a.fin, rate: a.fin / Number(t.primed_sq_ft) });
   }
   const pooled = (pts) => (pts.length ? sum(pts.map((p) => p.hours)) / sum(pts.map((p) => p.sq_ft)) : null);
   const jobs = (pts) => [...new Set(pts.map((p) => p.project))];

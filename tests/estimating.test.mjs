@@ -24,6 +24,7 @@ test('settled needs Completed and a quiet period', () => {
   assert.equal(settledStatus({ last: '2026-01-01' }, 'Completed', '2026-01-20', 14).settled, true);
   assert.equal(settledStatus({ last: '2026-01-10' }, 'Completed', '2026-01-20', 14).settled, false);
   assert.equal(settledStatus({ last: '2026-01-01' }, 'On Schedule', '2026-01-20', 14).settled, false);
+  assert.equal(settledStatus({ last: '2026-01-01' }, 'Closed', '2026-01-20', 14).settled, true);
   assert.equal(settledStatus(null, 'Completed', '2026-01-20', 14).settled, false);
 });
 
