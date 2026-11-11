@@ -24,8 +24,10 @@ convention, and the due date, which had moved in Innergy.
 ## Use
 
 ```
-python make_checklist.py P-26-1007-004p --recset RECSET.pdf --intake intake.json --out "<job>/04_PRODUCTION"
+python make_checklist.py P-26-1007-004p --recset RECSET.pdf --model "<working model>.3dm" --intake intake.json --out "<job>/04_PRODUCTION"
 ```
+
+`--model` fills the CNC part count from the Rhino working model (see "Part count" below).
 
 On Windows, double-click `run_checklist.bat`. It asks for the work order, the RECSET and the
 output folder; blank VIF / engineering sign-off take SP's defaults from `settings.json`.
@@ -108,6 +110,21 @@ CAD text extraction is unordered, so `recset.py` works off position, not reading
 Section parsers are scoped to the page their header is on. Newer RECSETs carry sheet goods inside
 the HARDWARE SCHEDULE as `LUMBER | NA | SHEET GOOD | <material> | NA | <qty>`, which is the
 ordering authority (about 20% over a tight nest). Use `nest.py` as a cross-check.
+
+## Part count (CNC)
+
+`--model` counts every **solid** (Brep, extrusion, SubD, mesh) on a sheet-goods layer of the
+working model (MEDEX, ply, PlumaPly, PF maple, PS/rift white oak, MDF; not solid wood, stone,
+hardware, glass, steel), drops a duplicated copy, and puts the count in the take-off. Curves,
+hatches and anything under layout space are not parts. The per-layer breakdown goes into the
+estimate record, so the count can be checked later.
+
+There's no need for a trimmed MATERIAL CALC copy (most jobs don't have one). Checked 2026-11-10:
+
+| WO | Trimmed count | Working model | CNC at formula | Actual so far |
+|---|---|---|---|---|
+| 104 Scullery | 309 (sheet said 43 h, sheet route) | 483 | 29 h | 26.5 h |
+| 105 Kitchen | 275 (sheet said 28 h) | 381 | 25 h | 21.4 h (running) |
 
 ## Rhino models: the duplicate problem
 

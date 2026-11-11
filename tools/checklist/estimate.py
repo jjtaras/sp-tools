@@ -20,7 +20,10 @@ Take-off (the intake's "takeoff" block):
     }
 
 Standalone:
-    python estimate.py --takeoff takeoff.json [--name "WO name"] [--recset RECSET.pdf] [--intake intake.json]
+    python estimate.py --takeoff takeoff.json [--model model.3dm] [--name "WO name"] [--recset RECSET.pdf] [--intake intake.json]
+
+--model fills part_count from the Rhino working model (measure.py: solids on sheet-goods layers,
+duplicate copy removed). No trimmed MATERIAL CALC copy is needed.
 """
 
 import argparse
@@ -234,6 +237,7 @@ def main():
     ap.add_argument("--name", default="", help="Work order name, for the build-type recommendation")
     ap.add_argument("--recset", help="RECSET PDF, for the build-type recommendation")
     ap.add_argument("--intake", help="Intake JSON, for the build-type recommendation")
+    ap.add_argument("--model", help="Rhino working model (.3dm): fills the take-off's part count")
     args = ap.parse_args()
     intake = {}
     if args.intake:
@@ -247,10 +251,15 @@ def main():
     print("Recommended build type:", rec["build_type"], ("+ showpiece portion" if rec["showpiece"] else ""), f"({rec['confidence']})")
     for r in rec["reasons"]:
         print("  -", r)
-    if args.takeoff:
-        with open(args.takeoff, encoding="utf-8") as fh:
-            t = json.load(fh)
-        t = t.get("takeoff", t)
+    if args.takeoff or args.model:
+        t = {}
+        if args.takeoff:
+            with open(args.takeoff, encoding="utf-8") as fh:
+                t = json.load(fh)
+            t = t.get("takeoff", t)
+        if args.model:
+            from make_checklist import apply_model
+            t = apply_model(t, args.model)
         rates = load_rates()
         est = estimate(t, rates, rec)
         h = est["hours"]

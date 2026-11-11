@@ -571,11 +571,26 @@ def build(wo_number, intake, template, out_dir):
     }
 
 
+def apply_model(takeoff, model_path):
+    """Fill the take-off's part count from the model. A count already in the intake wins, with a warning."""
+    import measure  # rhino3dm is only needed when a model is given
+    m = measure.summarize(model_path, os.path.basename(model_path))
+    takeoff["model"] = {"file": os.path.basename(model_path), "parts": m["parts"], "sqft": m["sqft"],
+                        "note": m["note"], "by_layer": m["by_layer"]}
+    if takeoff.get("part_count") is None:
+        takeoff["part_count"] = m["parts"]
+    elif int(takeoff["part_count"]) != m["parts"]:
+        print(f"WARNING: intake part_count {takeoff['part_count']} vs model {m['parts']}. The intake value is used.")
+    print(f"Model: {m['parts']} parts, {m['sqft']} sq ft on {m['materials']} sheet-goods layers ({m['note']}).")
+    return takeoff
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("wo", help="Work order number, e.g. P-26-1007-011p")
     ap.add_argument("--intake", help="JSON file with the manual fields")
     ap.add_argument("--recset", help="RECSET shop drawing PDF to pre-fill from")
+    ap.add_argument("--model", help="Rhino working model (.3dm): part count for the CNC estimate")
     ap.add_argument("--template", default=DEFAULT_TEMPLATE)
     ap.add_argument(
         "--out",
@@ -602,6 +617,10 @@ def main():
     if args.intake:
         with open(args.intake) as fh:
             intake.update({k: v for k, v in json.load(fh).items() if v not in (None, "", [])})
+    # CNC take-off from the working model: every solid on a sheet-goods layer, duplicate copy removed.
+    # No trimmed MATERIAL CALC copy needed: on 104/105 the untrimmed count landed within ~15% of actual.
+    if args.model:
+        intake["takeoff"] = apply_model(dict(intake.get("takeoff") or {}), args.model)
     # Unset people fields take SP's defaults (checklist/settings.json).
     for field, value in SETTINGS.get("defaults", {}).items():
         if not intake.get(field):

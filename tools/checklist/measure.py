@@ -33,6 +33,11 @@ EXCLUDE = re.compile(
     r'annotation|drawing|dimension|text|^op$|^0$|default|overlay|glass'
 )
 
+# Only solids are parts. Curves (outlines, section lines) and hatches have bounding boxes
+# too, and on a working model they can add 10%+ to the count. Layout space is drawing, not model.
+SOLIDS = (rhino3dm.Brep, rhino3dm.Extrusion, rhino3dm.SubD, rhino3dm.Mesh)
+LAYOUT = re.compile(r'(?i)layout\s*space|hatch')
+
 # A candidate offset has to line up at least this share of the smaller side
 # before the model is treated as carrying a duplicate.
 DUP_SUPPORT = 0.35
@@ -46,8 +51,11 @@ def read(path):
     layers = {l.Index: l.FullPath for l in model.Layers}
     out = []
     for obj in model.Objects:
-        leaf = layers.get(obj.Attributes.LayerIndex, "").split("::")[-1]
-        if EXCLUDE.search(leaf) or not MATERIAL.search(leaf):
+        full = layers.get(obj.Attributes.LayerIndex, "")
+        leaf = full.split("::")[-1]
+        if EXCLUDE.search(leaf) or not MATERIAL.search(leaf) or LAYOUT.search(full):
+            continue
+        if not isinstance(obj.Geometry, SOLIDS):
             continue
         b = obj.Geometry.GetBoundingBox()
         if b is None:
@@ -112,13 +120,9 @@ def dedupe(parts):
                   f"{max(la, ra):.0f} sq ft, dropped {len(drop)} / {min(la, ra):.0f}")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("model")
-    ap.add_argument("--label", default=None)
-    args = ap.parse_args()
-
-    parts, units = read(args.model)
+def summarize(path, label=None):
+    """Part count and area for one model, after duplicate removal. The checklist's CNC take-off."""
+    parts, units = read(path)
     kept, note = dedupe(parts)
 
     by_layer = collections.defaultdict(lambda: [0, 0.0])
@@ -131,9 +135,9 @@ def main():
     # the pieces that make a job slow relative to its size.
     small = sum(1 for p in kept if p["sqft"] < 1.0)
 
-    print(json.dumps({
-        "label": args.label or args.model,
-        "model": args.model,
+    return {
+        "label": label or path,
+        "model": path,
         "units": units,
         "raw_parts": len(parts),
         "note": note,
@@ -145,7 +149,15 @@ def main():
         "materials": len(by_layer),
         "by_layer": {k: {"parts": v[0], "sqft": round(v[1], 1)}
                      for k, v in sorted(by_layer.items(), key=lambda x: -x[1][1])},
-    }))
+    }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("model")
+    ap.add_argument("--label", default=None)
+    args = ap.parse_args()
+    print(json.dumps(summarize(args.model, args.label)))
 
 
 if __name__ == "__main__":
