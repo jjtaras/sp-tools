@@ -37,7 +37,7 @@ assumptions:
   shop.hours_per_week:             { type: number, used_by: [production-tracker], description: "Hours per person per week; crew x this = weekly capacity" }
   shop.post_fab_fallback_share:    { type: share,  used_by: [production-tracker], description: "Past fabrication with no finishing/staging plan, remaining hours are capped at this share of the WO's budget" }
   shop.max_hours_per_wo_per_day:   { type: number, used_by: [production-tracker], description: "Work not yet in the shop is scheduled as late as possible at this rate per WO" }
-  shop.load_weeks:                 { type: number, used_by: [production-tracker], description: "Weeks shown on the load chart" }
+  shop.load_weeks:                 { type: number, used_by: [production-tracker], description: "The tracker's one look-ahead, in weeks: schedule, load chart, bottleneck table and read-first notes" }
   shop.nonshop_pattern:            { type: regex,  used_by: [production-tracker], description: "Production WOs whose name matches are field/logistics value, not shop hours" }
 
   # ---- billing dashboard (Margin Board)

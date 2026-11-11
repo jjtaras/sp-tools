@@ -2,6 +2,10 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.3.0 (2026-11-10)
+
+- One 12-week look-ahead (`shop.load_weeks`) for the schedule, load chart, bottlenecks and read-first notes; the Look ahead dropdown is removed.
+
 ## 1.2.0 (2026-11-10)
 
 - Shop load (chart, This week / Next week, capacity note, per-job hours) counts CNC + fab + finishing only; drafting moved to Bottlenecks by area.

@@ -2,6 +2,10 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.3.0 (2026-11-10)
+
+No change to this board; redeployed with the release.
+
 ## 1.2.0 (2026-11-10)
 
 No change to this board; redeployed with the release.

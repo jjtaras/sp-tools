@@ -149,7 +149,6 @@ details[open] .chev{transform:rotate(45deg)}
   <div class="filters">
     <label>PM <select id="fPM"><option value="">All PMs</option></select></label>
     <label>Job <select id="fJob"><option value="">All jobs</option></select></label>
-    <label>Look ahead <select id="fLA"><option value="8">8 weeks</option><option value="16">16 weeks</option><option value="0">All dated work</option></select></label>
     <label>Show <select id="fSt"><option value="">All open WOs</option><option value="attn">Late, at risk, watch</option><option value="late">Late only</option></select></label>
   </div>
 
@@ -356,7 +355,7 @@ ACTIVE.forEach(w=>{if(!w.projEnd||w.done||w.hold) return;
 /* ---------- timeline range ---------- */
 const openCds=ACTIVE.map(w=>+w.cdD);
 const R0=monday(new Date(TODAY.getTime()-56*DAY));
-// Look-ahead: 8 weeks by default, 16 weeks, or all dated work (capped at 26 weeks). Set from the Look ahead filter.
+// Look-ahead: one horizon for the whole page, shop.load_weeks (schedule, load chart, bottlenecks).
 let R1,GL,TODAYLINE;
 const pct=d=>Math.max(0,Math.min(1,(d-R0)/(R1-R0)));
 const P_=d=>(pct(d)*100).toFixed(3)+'%';
@@ -461,7 +460,7 @@ document.getElementById('asof').textContent=DATA.asof;
 (document.getElementById('r1')||{}).textContent=`${ST.cogs_labor_pct*100}% of WO value − max(${ST.material_reserve_pct*100}% materials, POs)`;(document.getElementById('r3b')||{}).textContent=`$${ST.rate_production}/hr`;(document.getElementById('r4')||{}).textContent=ST.max_hrs_per_wo_per_day;
 (document.getElementById('r2')||{}).textContent=`$${ST.rate_drafting}/hr`;(document.getElementById('r3')||{}).textContent=`$${ST.rate_production}/hr`;
 (document.getElementById('skipped')||{}).innerHTML=DATA.skipped.length?`<b>Not shown:</b> ${DATA.skipped.map(esc).join(', ')}.`:'';
-const STATE={pm:'',job:'',st:'',hd:true,si:false,hs:false,la:8};
+const STATE={pm:'',job:'',st:'',hd:true,si:false,hs:false};
 try{Object.assign(STATE,JSON.parse(localStorage.getItem('sptracker')||'{}'))}catch(e){}
 Object.assign(STATE,{hd:true,si:false,hs:false,reveal:null}); // fixed now that the toggles are gone; overrides any old saved settings
 fPM.value=STATE.pm;
@@ -558,12 +557,11 @@ function wire(root){root.querySelectorAll('.prow').forEach(r=>{const t=()=>{cons
 const fJob=document.getElementById('fJob');
 PJ.filter(P=>P.open.length).sort((a,b)=>a.project.num.localeCompare(b.project.num,undefined,{numeric:true})).forEach(P=>fJob.insertAdjacentHTML('beforeend',`<option value="${P.key}">${esc(jobLabel(P))}${P.project.site?' · '+esc(P.project.site):''}</option>`));
 fJob.value=STATE.job||'';document.getElementById('fSt').value=STATE.st||'';
-if(![0,8,16].includes(+STATE.la)) STATE.la=8; document.getElementById('fLA').value=String(STATE.la); setRange(+STATE.la);
+setRange(ST.load_weeks);
 const save=()=>{try{localStorage.setItem('sptracker',JSON.stringify(STATE))}catch(_){}};
 fPM.onchange=()=>{STATE.pm=fPM.value;render()};
 fJob.onchange=()=>{STATE.job=fJob.value;render()};
 document.getElementById('fSt').onchange=e=>{STATE.st=e.target.value;render()};
-document.getElementById('fLA').onchange=e=>{STATE.la=+e.target.value;setRange(STATE.la);render()};
 render();
 if(location.hash&&location.hash.startsWith('#wo-'))goWO(location.hash.slice(1));
 </script>
