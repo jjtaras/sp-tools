@@ -63,6 +63,15 @@ Jeffrey works on this from the Mac (home) and the Windows 11 PC (work). GitHub i
 3. ~~Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml`.~~ Done 2026-11-10. Owner decisions applied and logged in the SP config CHANGELOG: boards share rules (tracker now counts labor from timesheets with the Margin Board's rules), seconds dropped, crew 21, no numbers in pages. Open: Innergy planned hours still cap the tracker's post-fab forecast (seed notes say ignore them); finisher headcount / sprayer efficiency.
 4. ~~Set up the build plus deploy script, and redeploy both boards from the repo.~~ Done 2026-11-10: `npm run deploy` (v1.0.0 → Margin Board version 5, Production Tracker version 13); `npm run rollback -- <app>` returns to the pre-sp-tools versions (4 / 12).
 
+## In progress: automated take-off (as of 2026-11-10)
+
+Goal: `tools/checklist` takes quantities off the Rhino working model (and RECSET) so hours come from data, not hand take-offs. Estimate records + `npm run calibrate` compare them with actuals.
+
+- **Done:** CNC part count via `--model` (solids on sheet-goods layers, duplicate removed; no MATERIAL CALC copy needed, since most jobs don't have one). CNC uses the formula, not the per-sheet method: 104 formula 29 h vs actual 26.5 (sheet said 43). `elevations.py`: sq ft per straight run from the model; 104 = 150.8 sf vs 147.6 by hand.
+- **Never take dimensions off a drawing's scale.** Each view on a sheet can have its own scale. Use the model, or printed dimension strings only.
+- **Next:** (1) split L/U runs into legs and flag islands. 105 Kitchen is the test case; waiting on Jeffrey: what did 105's hand 85.8 sf (58.4 cased + 27.4 glass/wine) cover, given the model holds ~170 sf? (2) Finish area: proposed rule is every material is finished except prefinished (PF) layers, with the RECSET finish legend overriding; waiting on Jeffrey to confirm. (3) Sheet count from the RECSET hardware schedule. (4) Wire elevations into the intake take-off.
+- Test models: `SP PROJECTS/ACTIVE JOBS/1517_THINK_1165 PARK/02_DRAFTING - DESIGN/02_WORKING FILES/` (004p Scullery, 005p Kitchen), in SP's Dropbox. The Dropbox root differs per machine.
+
 ## SP config location (decided Nov 2026)
 
 SP's side lives in an `sp-tools-config/` folder on SP's Google Drive (a Shared drive if SP uses them, otherwise Jeffrey's studiopracticenyc.com My Drive). It's owned by SP's Workspace, not Jeffrey's personal accounts.
