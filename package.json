@@ -1,6 +1,6 @@
 {
   "name": "sp-tools",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "Shop cost-model engine and the Apps Script dashboards that use it",
   "type": "module",

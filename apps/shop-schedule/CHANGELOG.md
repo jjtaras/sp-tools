@@ -2,6 +2,10 @@
 
 Changes to this board's code. Assumption values are logged in the SP config CHANGELOG.
 
+## 1.3.1 (2026-11-10)
+
+- Fix: horizon, capacity and daily spread limit come from the assumptions served with the page, not the settings saved with the data, so assumption changes show without waiting for a refresh.
+
 ## 1.3.0 (2026-11-10)
 
 - One 12-week look-ahead (`shop.load_weeks`) for the schedule, load chart, bottlenecks and read-first notes; the Look ahead dropdown is removed.

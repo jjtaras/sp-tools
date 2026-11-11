@@ -226,7 +226,10 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const monday=d=>{const x=new Date(d);const g=x.getDay();x.setDate(x.getDate()+(g===0?1:g===6?2:1-g));return x};
 const roomCode=n=>(n.match(/^(\d{3}[A-Z]?)(?![A-Za-z0-9])/)||[])[1]||null;
 const LABEL={late:'Late',risk:'At risk',watch:'Watch',ok:'On track',done:'Staged',hold:'On hold'};
-const CAP=(ST.shop_crew||0)*(ST.hours_per_week||0);
+// Page-only settings (horizon, capacity, daily spread limit) come from the assumptions served with the page, so a change
+// shows as soon as it's deployed. ST (saved with the data) is only used for how the saved forecasts were calculated.
+const CREW=Object.values(ASM.shop.crew_by_phase).reduce((a,b)=>a+b,0), HPW=ASM.shop.hours_per_week, MAXD=ASM.shop.max_hours_per_wo_per_day;
+const CAP=CREW*HPW;
 
 /* ---------- derive per project ---------- */
 const PJ=DATA.projects;
@@ -258,7 +261,7 @@ PJ.forEach(P=>{
       const sd=w.sdays, pace=w.fcH/Math.max(sd,1), why=[], preFab=w.preFab;
       if(w.kb&&w.kb.ord>=4) why.push('Finishing complete, ready to stage');
       if(sd<=ASM.schedule.at_risk_shop_days&&preFab) why.push(`Still in ${w.where} with ${sd} shop day${sd>1?'s':''} to staged`);
-      if(pace>(ST.max_hrs_per_wo_per_day)) why.push(`${hrs(w.fcH)} forecast hrs over ${sd} shop days (${Math.round(pace)} hrs/day)`);
+      if(pace>(MAXD)) why.push(`${hrs(w.fcH)} forecast hrs over ${sd} shop days (${Math.round(pace)} hrs/day)`);
       if(why.length&&!(why.length===1&&why[0].startsWith('Finishing complete'))){w.st='risk';w.why=why.join('. ')}
       else if(sd<=ASM.schedule.watch_shop_days&&preFab){w.st='watch';w.why=`In ${w.where}, ${sd} shop days to staged`}
       else{w.st='ok';w.why=why.length?why.join('. '):(w.si===6?'In staging':'')}
@@ -320,7 +323,7 @@ const jobLabel=P=>`${P.project.num} ${P.project.client}`;
 const siteOf=P=>[P.project.site,P.project.innergy].filter(Boolean).join(' · ');
 
 /* ---------- load (computed once, filtered by PM at render) ---------- */
-const W0=monday(TODAY), NW=ST.load_weeks;
+const W0=monday(TODAY), NW=ASM.shop.load_weeks;
 ACTIVE.forEach(w=>{
   // Spread each WO's forecast hours evenly over the shop days it has before its critical date, at no more than
   // max_hrs_per_wo_per_day (crew that can work one WO). Hours that don't fit run past the critical date at that limit (w.projEnd).
@@ -331,7 +334,7 @@ ACTIVE.forEach(w=>{
   // worked in order: drafting, CNC, fab, finishing. Each day's hours go to the earliest area with hours left.
   const rem=(w.ph||PHO).filter(p=>PHO.indexOf(p)>=(w.ord||0)), rt=rem.reduce((s,p)=>s+PHW[p],0);
   const q=rem.map(p=>[p,rt?w.fcH*PHW[p]/rt:0]);
-  const capD=ST.max_hrs_per_wo_per_day, start=new Date(Math.max(TODAY,W0));
+  const capD=MAXD, start=new Date(Math.max(TODAY,W0));
   // Not in the shop yet: start at its Innergy planned start, pulled earlier (never before today) if needed to finish by critical at the daily limit.
   let s=new Date(start); const ps=D(w.ps);
   if(!w.inShop&&ps&&ps>s&&ps<w.cdD){const need=Math.ceil(w.fcH/capD);let x=new Date(w.cdD),n=0;
@@ -348,7 +351,7 @@ ACTIVE.forEach(w=>{
 // Shop load: CNC + fab + finishing. Drafting isn't shop work (drafters aren't in the shop crew); it shows under Bottlenecks by area.
 ACTIVE.forEach(w=>{w.shop=w.load.map((_,k)=>w.loadP.cnc[k]+w.loadP.fab[k]+w.loadP.fin[k])});
 ACTIVE.forEach(w=>{if(!w.projEnd||w.done||w.hold) return;
-  const msg=`At ${ST.max_hrs_per_wo_per_day} hrs/day, finishes about ${f(w.projEnd)}, ${shopDays(new Date(w.cdD.getTime()+DAY),w.projEnd)} shop days after critical`;
+  const msg=`At ${MAXD} hrs/day, finishes about ${f(w.projEnd)}, ${shopDays(new Date(w.cdD.getTime()+DAY),w.projEnd)} shop days after critical`;
   if(w.st==='ok'||w.st==='watch') w.st='risk';
   w.why=(w.why?w.why+'. ':'')+msg;});
 
@@ -389,7 +392,7 @@ function prodRow(w){
   const sub=w.done?`${w.kbDone&&!(w.si>=6)?'Finishing complete':w.si>=7?'Delivered':'Staged'} ${w.stagedD?f(w.stagedD):'?'}${w.stagedInferred&&!w.kbDone?'*':''}${w.slip>0?` · ${w.slip}d after critical`:''}`:`${w.where}${w.kb?'':' · '+w.sd+'d'}${w.st!=='ok'?' · '+LABEL[w.st]:''}${w.cdPlaceholder?' · date is a placeholder':''}`;
   const osTag=w.outsourced?'<span class="ostag" title="'+esc(w.outsourced)+'">Outsourced</span>':'';
   const c=w.fc;
-  const facts=`<div class="facts"><span>Value <b>${c.vsrc==='none'?'none':money(c.value)}${c.vsrc==='override'?' (entered)':''}</b></span>${c.instShare?`<span>Install share <b>${Math.round(c.instShare*100)}% (${money(c.value*c.instShare)})</b> removed</span>`:''}<span>POs <b>${money(c.po)}</b></span><span>Budget <b>${hrs(c.budgetH)} h</b></span><span>Booked <b>${hrs(c.draftH)} drafting · ${hrs(c.prodH)} shop</b></span><span>Forecast left <b>${hrs(w.fcH)} h</b>${w.nonshop?' (not shop work)':w.fcSrc==='none'?' (no value)':''}</span>${w.burn&&w.burn.ok?`<span>Labor burn <b>${esc(burnTip(w))}</b></span>`:''}${w.kb?`<span>Kanban <b>${Object.entries(w.kb.lanes).map(([k,v])=>({draft:'Drafting',cnc:'CNC',fab:'Fab',fin:'Finishing'}[k])+': '+esc(v)).join(' · ')}</b></span>`:''}${w.outsourced?`<span>Scope <b>${esc(w.outsourced)}</b></span>`:''}${w.projEnd&&!w.done?`<span>Projected finish <b>${f(w.projEnd)}</b> at ${ST.max_hrs_per_wo_per_day} hrs/day</span>`:''}${w.cdPlaceholder?`<span>Critical <b>${f(D(w.cdPlaceholder))} placeholder, using ${f(w.cdD)}</b></span>`:''}<span>Planned start <b>${f(D(w.ps))}</b></span>${w.shipped?`<span>Shipped <b>${f(D(w.shipped))}</b></span>`:''}</div>${c.capped?`<div class="note">${c.capped.src==='outsourced'?`Outsourced: forecast is SP's scope only, 0 once Fab is done (value rule said ${hrs(c.capped.formula)} h).`:`Past fabrication: capped at ${c.capped.src} (value rule said ${hrs(c.capped.formula)} h).`}</div>`:''}`;
+  const facts=`<div class="facts"><span>Value <b>${c.vsrc==='none'?'none':money(c.value)}${c.vsrc==='override'?' (entered)':''}</b></span>${c.instShare?`<span>Install share <b>${Math.round(c.instShare*100)}% (${money(c.value*c.instShare)})</b> removed</span>`:''}<span>POs <b>${money(c.po)}</b></span><span>Budget <b>${hrs(c.budgetH)} h</b></span><span>Booked <b>${hrs(c.draftH)} drafting · ${hrs(c.prodH)} shop</b></span><span>Forecast left <b>${hrs(w.fcH)} h</b>${w.nonshop?' (not shop work)':w.fcSrc==='none'?' (no value)':''}</span>${w.burn&&w.burn.ok?`<span>Labor burn <b>${esc(burnTip(w))}</b></span>`:''}${w.kb?`<span>Kanban <b>${Object.entries(w.kb.lanes).map(([k,v])=>({draft:'Drafting',cnc:'CNC',fab:'Fab',fin:'Finishing'}[k])+': '+esc(v)).join(' · ')}</b></span>`:''}${w.outsourced?`<span>Scope <b>${esc(w.outsourced)}</b></span>`:''}${w.projEnd&&!w.done?`<span>Projected finish <b>${f(w.projEnd)}</b> at ${MAXD} hrs/day</span>`:''}${w.cdPlaceholder?`<span>Critical <b>${f(D(w.cdPlaceholder))} placeholder, using ${f(w.cdD)}</b></span>`:''}<span>Planned start <b>${f(D(w.ps))}</b></span>${w.shipped?`<span>Shipped <b>${f(D(w.shipped))}</b></span>`:''}</div>${c.capped?`<div class="note">${c.capped.src==='outsourced'?`Outsourced: forecast is SP's scope only, 0 once Fab is done (value rule said ${hrs(c.capped.formula)} h).`:`Past fabrication: capped at ${c.capped.src} (value rule said ${hrs(c.capped.formula)} h).`}</div>`:''}`;
   return `<div class="grow prow${w.done?' isdone':''}" data-done="${w.done}" data-support="${w.group==='support'}" data-installed="${w.installed}" tabindex="0" role="button" aria-expanded="false">
     <div class="glabel"><span class="mono" style="font-size:12px">${w.n}</span><div class="nm"><div>${esc(w.name)}</div><div class="sub">${osTag}${sub}</div></div><span class="crit">${f(w.cdD)}</span><span class="float ${w.sdays<0&&!w.done?'neg':''}">${w.done||w.hold?'':w.sdays}</span></div>
     <div class="gtrack">${GL}${mk}</div>
@@ -457,7 +460,7 @@ PJ.forEach(P=>{
 
 /* ---------- render (PM filter aware) ---------- */
 document.getElementById('asof').textContent=DATA.asof;
-(document.getElementById('r1')||{}).textContent=`${ST.cogs_labor_pct*100}% of WO value − max(${ST.material_reserve_pct*100}% materials, POs)`;(document.getElementById('r3b')||{}).textContent=`$${ST.rate_production}/hr`;(document.getElementById('r4')||{}).textContent=ST.max_hrs_per_wo_per_day;
+(document.getElementById('r1')||{}).textContent=`${ST.cogs_labor_pct*100}% of WO value − max(${ST.material_reserve_pct*100}% materials, POs)`;(document.getElementById('r3b')||{}).textContent=`$${ST.rate_production}/hr`;(document.getElementById('r4')||{}).textContent=MAXD;
 (document.getElementById('r2')||{}).textContent=`$${ST.rate_drafting}/hr`;(document.getElementById('r3')||{}).textContent=`$${ST.rate_production}/hr`;
 (document.getElementById('skipped')||{}).innerHTML=DATA.skipped.length?`<b>Not shown:</b> ${DATA.skipped.map(esc).join(', ')}.`:'';
 const STATE={pm:'',job:'',st:'',hd:true,si:false,hs:false};
@@ -469,7 +472,7 @@ function render(){
   const pm=STATE.pm, inPM=P=>!pm||P.project.pm===pm;
   const PS=PJ.filter(inPM).filter(P=>P.open.length).sort((a,b)=>(a.onHold-b.onHold)||((a.nextCd||Infinity)-(b.nextCd||Infinity)));
   const A=PS.flatMap(P=>P.active);
-  document.getElementById('pmeta').innerHTML=`<span><b>${PS.filter(P=>!P.onHold).length}</b> active jobs</span><span><b>${A.length}</b> open production WOs</span><span>Shop capacity <b class="mono">${CAP} hrs/wk</b> (${ST.shop_crew} × ${ST.hours_per_week})</span>${pm?`<span>Filtered to <b>${esc(pm)}</b></span>`:''}`;
+  document.getElementById('pmeta').innerHTML=`<span><b>${PS.filter(P=>!P.onHold).length}</b> active jobs</span><span><b>${A.length}</b> open production WOs</span><span>Shop capacity <b class="mono">${CAP} hrs/wk</b> (${CREW} × ${HPW})</span>${pm?`<span>Filtered to <b>${esc(pm)}</b></span>`:''}`;
   const load=new Array(NW).fill(0),loadR=new Array(NW).fill(0);
   A.forEach(w=>w.shop.forEach((h,k)=>{load[k]+=h;if(w.st==='late'||w.st==='risk')loadR[k]+=h}));
   const late=A.filter(w=>w.st==='late'),risk=A.filter(w=>w.st==='risk');
@@ -491,8 +494,8 @@ function render(){
   // bottlenecks by area
   const loadP=Object.fromEntries(PHO.map(p=>[p,new Array(NW).fill(0)]));
   A.forEach(w=>PHO.forEach(p=>w.loadP[p].forEach((h,k)=>{loadP[p][k]+=h})));
-  const CREW=ASM.shop.crew_by_phase, AREA={cnc:'cnc',fab:'fab',fin:'finishing'};
-  const areaCap=p=>AREA[p]&&CREW[AREA[p]]?CREW[AREA[p]]*ST.hours_per_week:0;
+  const CREWP=ASM.shop.crew_by_phase, AREA={cnc:'cnc',fab:'fab',fin:'finishing'};
+  const areaCap=p=>AREA[p]&&CREWP[AREA[p]]?CREWP[AREA[p]]*HPW:0;
   const lvl=(h,c)=>!c||!h?'':h>c?'late':h>c*ASM.shop.capacity_warn_share?'risk':'';
   const bnSum=[];
   ['fin','fab','cnc'].forEach(p=>{const c=areaCap(p);if(!c)return;const over=loadP[p].map((h,k)=>({h,k})).filter(x=>x.h>c);
@@ -500,16 +503,16 @@ function render(){
       bnSum.push(`${PHN[p]} over capacity in ${over.length} of the next ${NW} weeks (peak ${Math.round(pk.h/c*100)}%, week of ${f(d)})`)}});
   (document.getElementById('bnsum')||{}).innerHTML=`<p><b>${bnSum.length?bnSum.join('. ')+'.':'Every area is within capacity for the next '+NW+' weeks.'}</b></p>`;
   const wkd=k=>{const d=new Date(W0);d.setDate(d.getDate()+k*7);return d};
-  (document.getElementById('bnsub')||{}).textContent=`Forecast hours each week by area, against that area's capacity (people × ${ST.hours_per_week} hrs). Each WO's hours are split by the phase shares (CNC ${PHW.cnc}, fab ${PHW.fab}, finishing ${PHW.fin} of every ${PHW.draft+PHW.cnc+PHW.fab+PHW.fin}) for the phases it still has ahead, worked in order. Drafting is shown for reference; drafters aren't in the shop crew. Amber = over ${Math.round(ASM.shop.capacity_warn_share*100)}% of capacity, red = over capacity.`;
+  (document.getElementById('bnsub')||{}).textContent=`Forecast hours each week by area, against that area's capacity (people × ${HPW} hrs). Each WO's hours are split by the phase shares (CNC ${PHW.cnc}, fab ${PHW.fab}, finishing ${PHW.fin} of every ${PHW.draft+PHW.cnc+PHW.fab+PHW.fin}) for the phases it still has ahead, worked in order. Drafting is shown for reference; drafters aren't in the shop crew. Amber = over ${Math.round(ASM.shop.capacity_warn_share*100)}% of capacity, red = over capacity.`;
   (document.getElementById('bneck')||{}).innerHTML=`<thead><tr><th>Area</th>${loadP.fab.map((_,k)=>`<th class="num">${f(wkd(k))}</th>`).join('')}</tr></thead><tbody>`+
-    ['cnc','fab','fin','draft'].map(p=>{const c=areaCap(p),ppl=AREA[p]?CREW[AREA[p]]:null;
+    ['cnc','fab','fin','draft'].map(p=>{const c=areaCap(p),ppl=AREA[p]?CREWP[AREA[p]]:null;
       return `<tr><td class="area"><b>${PHN[p]}</b><small>${c?`${ppl} people · ${hr0(c)} hrs/wk`:'not in shop capacity'}</small></td>`+
         loadP[p].map(h=>`<td class="num ${lvl(h,c)}">${h>=0.5?hr0(h):'·'}${c&&h>=0.5?`<small>${Math.round(h/c*100)}%</small>`:''}</td>`).join('')+'</tr>'}).join('')+'</tbody>';
   if(bnSum.length) rf.unshift(`<p><b>Bottlenecks:</b> ${bnSum.join('. ')}.</p>`);
   const RF=document.getElementById('readfirst'); RF.innerHTML=rf.join(''); RF.hidden=!rf.length;
   // load chart
   const mx=Math.max(...load,CAP,1),LH=150;
-  (document.getElementById('loadsub')||{}).textContent=`Shop work only: CNC, fab and finishing (drafting is under Bottlenecks by area). Amber = late or at risk. Dashed line = ${CAP} hr capacity.`;void ` Each WO's hours are spread evenly over the shop days from now (or its planned start, if it isn't in the shop yet) to its critical date, at no more than ${ST.max_hrs_per_wo_per_day} hrs a day per WO. Hours that don't fit run past the critical date at that rate. Amber is late or at-risk work. Dashed line is shop capacity (${ST.shop_crew} × ${ST.hours_per_week} = ${CAP} hrs, before time off).`;
+  (document.getElementById('loadsub')||{}).textContent=`Shop work only: CNC, fab and finishing (drafting is under Bottlenecks by area). Amber = late or at risk. Dashed line = ${CAP} hr capacity.`;void ` Each WO's hours are spread evenly over the shop days from now (or its planned start, if it isn't in the shop yet) to its critical date, at no more than ${MAXD} hrs a day per WO. Hours that don't fit run past the critical date at that rate. Amber is late or at-risk work. Dashed line is shop capacity (${CREW} × ${HPW} = ${CAP} hrs, before time off).`;
   const LD=document.getElementById('load');LD.style.gridTemplateColumns=`repeat(${NW},minmax(46px,1fr))`;LD.style.minWidth=(NW*52)+'px';
   document.getElementById('load').innerHTML=load.map((t,k)=>{const wk=new Date(W0);wk.setDate(wk.getDate()+k*7);const a=loadR[k];
     const top=A.filter(w=>w.shop[k]>0).reduce((m,w)=>{const j=jobLabel(w.P);m[j]=(m[j]||0)+w.shop[k];return m},{});
@@ -557,7 +560,7 @@ function wire(root){root.querySelectorAll('.prow').forEach(r=>{const t=()=>{cons
 const fJob=document.getElementById('fJob');
 PJ.filter(P=>P.open.length).sort((a,b)=>a.project.num.localeCompare(b.project.num,undefined,{numeric:true})).forEach(P=>fJob.insertAdjacentHTML('beforeend',`<option value="${P.key}">${esc(jobLabel(P))}${P.project.site?' · '+esc(P.project.site):''}</option>`));
 fJob.value=STATE.job||'';document.getElementById('fSt').value=STATE.st||'';
-setRange(ST.load_weeks);
+setRange(ASM.shop.load_weeks);
 const save=()=>{try{localStorage.setItem('sptracker',JSON.stringify(STATE))}catch(_){}};
 fPM.onchange=()=>{STATE.pm=fPM.value;render()};
 fJob.onchange=()=>{STATE.job=fJob.value;render()};

@@ -2,6 +2,10 @@
 
 Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGELOG.md`, and assumption changes go in the SP config CHANGELOG.
 
+## 1.3.1 (2026-11-10)
+
+Fix release (Production Tracker page); no engine or assumption changes.
+
 ## 1.3.0 (2026-11-10)
 
 Assumption change: `shop.load_weeks` 18 → 12 (the tracker's one look-ahead).
