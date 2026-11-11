@@ -63,13 +63,24 @@ Jeffrey works on this from the Mac (home) and the Windows 11 PC (work). GitHub i
 3. ~~Write `model/schema.yaml` and move the hardcoded numbers into `sp-tools-config/assumptions.yaml`.~~ Done 2026-11-10. Owner decisions applied and logged in the SP config CHANGELOG: boards share rules (tracker now counts labor from timesheets with the Margin Board's rules), seconds dropped, crew 21, no numbers in pages. Open: Innergy planned hours still cap the tracker's post-fab forecast (seed notes say ignore them); finisher headcount / sprayer efficiency.
 4. ~~Set up the build plus deploy script, and redeploy both boards from the repo.~~ Done 2026-11-10: `npm run deploy` (v1.0.0 → Margin Board version 5, Production Tracker version 13); `npm run rollback -- <app>` returns to the pre-sp-tools versions (4 / 12).
 
-## In progress: automated take-off (as of 2026-11-10)
+## In progress: production checklist for SP's PMs (as of 2026-11-11)
+
+Goal: a tool Jeffrey hands to SP's three other PMs so they make their own production checklists. Decisions so far:
+
+- **v1 scope:** the checklist only (Innergy → QR codes → filled PDF), with the RECSET fields read automatically. PMs type the hour estimates themselves; the take-off/estimating work below stays Jeffrey's until calibrated.
+- **Packaging:** all PMs are on Windows, with Rhino and SP's Dropbox. Plan is a packaged local Windows app built from the existing Python. Each PM has their own Innergy API key, entered once and stored in Windows Credential Manager, so no shared key and no server endpoint.
+- **Naming:** new checklists use the generator's convention (`{Project} - {WO name} - {WO number} - Production Checklist.pdf` in `04_PRODUCTION/`). **Leave existing issued sheets alone; never rename them.** RECSET convention: Jeffrey is confirming the drafters' existing one with Derek (pattern seen: `{job}_{client}_{address}_FX{fixture}_{name}[_{rev}]_RECSET[_{yymmdd}]`; open: how FX numbers map to WOs, which copy is the issued one).
+- **Measuring the RECSET pre-fill:** `py tools/checklist/check_recset.py "<SP Dropbox>/SP PROJECTS/ACTIVE JOBS" --out <scratch>/report.json` compares it with issued checklists (write the report outside the repo; it names SP jobs). 27 of 58 checklists pair (2026-11-11).
+- **Done 2026-11-11:** hardware schedule read column by column (wrapped cells, `/ BOM` headers, next-table stop, overprinted text flagged); sheet-good rows → Materials with counts/sizes; packing into the template rows in the PMs' grouped style, never dropping a line; first-row font bug fixed (one-widget parent fields flattened in memory); **QR scan-back added** (README claimed it, code didn't have it); SS → Steve S. in SP's `people`. Drafter now right in 18/27.
+- **Next:** finish codes from the FINISHES legend (sheets cite PT01 / BM colors; parser only says SHOP PRIMED); find the RECSET from the WO once Derek confirms the convention (`04_PRODUCTION/01_APPROVED DRAWINGS/` on 1516 and 1549 looks like it); then the Windows app (WO picker, PM's own key in Credential Manager, hours typed by the PM).
+
+## Paused: automated take-off (as of 2026-11-10)
 
 Goal: `tools/checklist` takes quantities off the Rhino working model (and RECSET) so hours come from data, not hand take-offs. Estimate records + `npm run calibrate` compare them with actuals.
 
 - **Done:** CNC part count via `--model` (solids on sheet-goods layers, duplicate removed; no MATERIAL CALC copy needed, since most jobs don't have one). CNC uses the formula, not the per-sheet method: 104 formula 29 h vs actual 26.5 (sheet said 43). `elevations.py`: sq ft per straight run from the model; 104 = 150.8 sf vs 147.6 by hand.
 - **Never take dimensions off a drawing's scale.** Each view on a sheet can have its own scale. Use the model, or printed dimension strings only.
-- **Next:** (1) split L/U runs into legs and flag islands. 105 Kitchen is the test case; waiting on Jeffrey: what did 105's hand 85.8 sf (58.4 cased + 27.4 glass/wine) cover, given the model holds ~170 sf? (2) Finish area: proposed rule is every material is finished except prefinished (PF) layers, with the RECSET finish legend overriding; waiting on Jeffrey to confirm. (3) Sheet count from the RECSET hardware schedule. (4) Wire elevations into the intake take-off.
+- **Next:** (1) split L/U runs into legs and flag islands. 105 Kitchen is the test case. The island is a separate WO (FX10504; ignore it in the 005p model; likely the 66" x 40" x 32" run). Run on the PC 2026-11-11: about 154 sf total, about 139 without the island. Still waiting on Jeffrey: what did 105's hand 85.8 sf (58.4 cased + 27.4 glass/wine) cover, given the model holds ~170 sf? (2) Finish area: proposed rule is every material is finished except prefinished (PF) layers, with the RECSET finish legend overriding; waiting on Jeffrey to confirm. (3) Sheet count from the RECSET hardware schedule. (4) Wire elevations into the intake take-off.
 - Test models: `SP PROJECTS/ACTIVE JOBS/1517_THINK_1165 PARK/02_DRAFTING - DESIGN/02_WORKING FILES/` (004p Scullery, 005p Kitchen), in SP's Dropbox. The Dropbox root differs per machine.
 
 ## SP config location (decided Nov 2026)

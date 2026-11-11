@@ -18,6 +18,7 @@ What it CANNOT read:
 """
 
 import re
+from collections import defaultdict
 
 import pymupdf
 
@@ -208,49 +209,115 @@ def _callouts(doc):
     return out
 
 
-def _hardware(doc):
-    """Rows of the HARDWARE SCHEDULE table -> ['(20) PINS - 1-5MM-ATQ-S, ...']."""
+# Hardware schedule columns, by header text (spaces squeezed out: "COLOR / FINISH" -> "COLOR/FINISH").
+HW_COLUMNS = {
+    "ITEM": "item",
+    "MANUFACTURER": "manufacturer",
+    "DESCRIPTION": "description",
+    "MODEL": "model",
+    "COLOR/FINISH": "finish",
+    "FINISH": "finish",
+    "QTY": "qty",
+    "QUANTITY": "qty",
+    "CLIENTAPPROVAL": "approval",
+    "NOTES": "notes",
+}
+HW_TITLE = re.compile(r"(?i)^HARDWARE\s+SCHEDULE\b")
+# Another table further down the same sheet ends the hardware schedule.
+NEXT_TABLE = re.compile(r"(?i)^(APPLIANCE|LIGHTING|PLUMBING|EQUIPMENT|ELECTRICAL)\s+SCHEDULE\b|^HATCH KEY$|^FINISHES$")
+EMPTY_CELL = re.compile(r"^(-+|N/?A|Y\s*/\s*N)$", re.I)
+
+
+def _hardware_tables(doc):
+    """Every HARDWARE SCHEDULE table -> [{'item', 'manufacturer', 'description', 'model', 'finish', 'qty', 'notes'}].
+
+    Read column by column. Header labels are centred over their columns while the values are
+    left-aligned, so each value goes to the header whose centre is nearest its own centre. Rows are
+    anchored on the ITEM column; a description that wraps onto a second line sits just above or
+    below the row's centre line and joins the nearest row.
+    """
+    items = []
     for page in doc:
         lines = _lines(page)
-        if not any(l[4].strip().upper() == "HARDWARE SCHEDULE" for l in lines):
-            continue
-        cols = {}
-        for key in ("DESCRIPTION", "MODEL", "COLOR/FINISH", "QTY", "MANUFACTURER", "ITEM"):
-            hits = [l for l in lines if l[4].strip().upper() == key]
-            if hits:
-                cols[key] = hits[0]
-        if "DESCRIPTION" not in cols:
-            continue
-        header_y = cols["DESCRIPTION"][3]
-        # Every row sits below the header band; bucket text by row centre.
-        rows = {}
-        for ly0, lx0, lx1, ly1, text in lines:
-            if ly0 <= header_y + 2:
+        titles = [l for l in lines if HW_TITLE.match(l[4].strip())]
+        for title in titles:
+            ty1 = title[3]
+            # Header row: the first band of column labels below the title.
+            labels = []
+            for l in lines:
+                key = re.sub(r"\s+", "", l[4].strip().upper())
+                if key in HW_COLUMNS and 0 < l[0] - ty1 < 80:
+                    labels.append((l, HW_COLUMNS[key]))
+            if not any(c == "description" for _, c in labels):
                 continue
-            t = text.strip()
-            if not t or t.upper() in HARDWARE_HEADERS:
+            hy1 = max(l[3] for l, _ in labels)
+            centres = [((l[1] + l[2]) / 2, c) for l, c in labels]
+            left = min(l[1] for l, _ in labels) - 120
+            right = max(l[2] for l, _ in labels) + 120
+            # The table ends at the next table title below it in the same columns (legends at the
+            # far side of the sheet, like the HATCH KEY, sit level with the rows and don't count).
+            stops = [
+                l[0] for l in lines
+                if l[0] > hy1 and left <= l[1] <= right
+                and (NEXT_TABLE.match(l[4].strip()) or HW_TITLE.match(l[4].strip()))
+            ]
+            bottom = min(stops) if stops else float("inf")
+
+            cells = []
+            for ly0, lx0, lx1, ly1, text in lines:
+                t = text.strip()
+                if ly0 <= hy1 + 1 or ly0 >= bottom or lx1 < left or lx0 > right or not t:
+                    continue
+                if re.search(r"(?i)approv|reject|revise|signature|print name|company", t):
+                    continue
+                cx = (lx0 + lx1) / 2
+                col = min(centres, key=lambda c: abs(c[0] - cx))[1]
+                cells.append(((ly0 + ly1) / 2, lx0, col, t))
+
+            anchors = sorted(y for y, _, col, t in cells if col == "item")
+            qty_ys = [y for y, _, col, t in cells if col == "qty"]
+            # A two-line item name: the second line has no quantity of its own, so it joins the row
+            # above. Rows packed tightly together each carry a quantity and stay separate.
+            merged = []
+            for y in anchors:
+                if merged and y - merged[-1] < 14 and not any(abs(q - y) < 4 for q in qty_ys):
+                    continue
+                merged.append(y)
+            if not merged:
                 continue
-            # NOISE would eat the QTY column, so let short integers through.
-            if NOISE.match(t) and not re.fullmatch(r"\d{1,4}", t):
-                continue
-            key = round(ly0 / 10)
-            rows.setdefault(key, []).append((lx0, t))
-        out = []
-        for key in sorted(rows):
-            cells = [t for _, t in sorted(rows[key])]
-            if len(cells) < 2:
-                continue
-            joined = " | ".join(cells)
-            if re.search(
-                r"(?i)approv|reject|revise|signature|print name|company|date"
-                r"|^sub\s*\d|recset|in review|hatch|finishes",
-                joined,
-            ):
-                continue
-            out.append(joined)
-        if out:
-            return out
-    return []
+            # Drawings sometimes carry the same text twice at the same spot (a copied block); keep one.
+            cells = list(dict.fromkeys((round(y), round(x), col, t) for y, x, col, t in cells))
+            rows = [defaultdict(list) for _ in merged]
+            for y, x, col, t in sorted(cells):
+                if col == "approval" or EMPTY_CELL.match(t):
+                    continue
+                i = min(range(len(merged)), key=lambda k: abs(merged[k] - y))
+                if abs(merged[i] - y) > 30:
+                    continue
+                rows[i][col].append((y, t))
+            for r in rows:
+                item, conflicts = {}, []
+                for col, parts in r.items():
+                    # Two different values printed on top of each other is a drawing error, not a
+                    # wrapped line: flag it rather than pick one.
+                    for (y1, t1), (y2, t2) in zip(parts, parts[1:]):
+                        if abs(y1 - y2) < 3 and t1 != t2:
+                            conflicts.append(f"{col}: {t1!r} and {t2!r} overprint each other")
+                    item[col] = " ".join(t for _, t in parts)
+                if item.get("item") or item.get("description"):
+                    out = {k: item.get(k, "") for k in ("item", "manufacturer", "description", "model", "finish", "qty", "notes")}
+                    if conflicts:
+                        out["conflict"] = "; ".join(conflicts)
+                    items.append(out)
+    return items
+
+
+def _hardware(doc):
+    """Rows of the HARDWARE SCHEDULE table as 'cell | cell | ...' strings (kept for older callers)."""
+    return [
+        " | ".join(v for v in (i["item"], i["manufacturer"], i["description"], i["model"], i["finish"], i["qty"], i["notes"]) if v)
+        for i in _hardware_tables(doc)
+    ]
 
 
 def parse(path):
@@ -274,8 +341,12 @@ def parse(path):
         "materials_callouts": materials,
         "finish_terms": finishes,
         "finishes_legend": finishes_legend,
-        "hardware": _hardware(doc),
+        "hardware_items": _hardware_tables(doc),
     }
+    result["hardware"] = [
+        " | ".join(v for v in (i["item"], i["manufacturer"], i["description"], i["model"], i["finish"], i["qty"], i["notes"]) if v)
+        for i in result["hardware_items"]
+    ]
     doc.close()
     return result
 

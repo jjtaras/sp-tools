@@ -278,8 +278,48 @@ def _fit_fontsize(text, widget):
     return FONT_FLOOR
 
 
+def _flatten_single_kid_text_fields(doc):
+    """Make each one-widget text field a plain field, so a font size set on it reaches the page.
+
+    In the template, Text211 (Materials row 1), Text2116 (a shop-notes row) and Text36 (a CNC tools
+    row) are a parent field holding the name and the 12 pt font, with one widget under it.
+    pymupdf can't change the size of such a widget (setting it, or copying the parent's DA onto
+    it, still drew 12 pt), so the first Materials row clipped while the rows under it shrank.
+    Moving the parent's keys onto the widget fixes it. Fields shown on every page (project, PM,
+    due date...) have several widgets and are left alone; so are non-text fields such as the QR
+    image buttons, whose names the QR placement depends on. Done in memory: the template on
+    SP's Drive is untouched.
+    """
+    cat = doc.pdf_catalog()
+    flattened = []
+    for page in doc:
+        for w in page.widgets():
+            kind, parent = doc.xref_get_key(w.xref, "Parent")
+            if kind != "xref":
+                continue
+            px = int(parent.split()[0])
+            if doc.xref_get_key(px, "FT")[1] != "/Tx":
+                continue
+            if len(re.findall(r"\d+ 0 R", doc.xref_get_key(px, "Kids")[1])) != 1:
+                continue
+            for key in ("T", "FT", "DA", "Q", "V", "DV", "Ff", "MaxLen"):
+                k, v = doc.xref_get_key(px, key)
+                if k != "null" and doc.xref_get_key(w.xref, key)[0] == "null":
+                    doc.xref_set_key(w.xref, key, pymupdf.get_pdf_str(v) if k == "string" else v)
+            doc.xref_set_key(w.xref, "Parent", "null")
+            flattened.append((px, w.xref))
+    if flattened:
+        kind, fields = doc.xref_get_key(cat, "AcroForm/Fields")
+        for px, kx in flattened:
+            fields = re.sub(rf"\b{px} 0 R", f"{kx} 0 R", fields)
+        doc.xref_set_key(cat, "AcroForm/Fields", fields)
+    return flattened
+
+
 def fill_checklist(template, out_path, values, qr_payloads):
     doc = pymupdf.open(template)
+
+    _flatten_single_kid_text_fields(doc)
 
     # Pass 1: work out the size each populated field needs on its own.
     fitted = {}
@@ -393,6 +433,170 @@ def _title(text):
     return " ".join(out)
 
 
+PACK_FONT = 9.0   # try to fit a packed block at this size first; _fit_fontsize can still shrink to FONT_FLOOR
+_field_widths = {}
+
+
+def _usable_width(field_names):
+    """Narrowest usable width (pt) of a block of template fields, measured off the template."""
+    if not _field_widths:
+        with pymupdf.open(DEFAULT_TEMPLATE) as doc:
+            for page in doc:
+                for w in page.widgets() or []:
+                    _field_widths[w.field_name] = w.rect.width - FIELD_PADDING
+    return min(_field_widths.get(f, 400.0) for f in field_names)
+
+
+def _text_width(text, size):
+    return pymupdf.get_text_length(text, fontname="helv", fontsize=size)
+
+
+def _wrap(groups, width, size):
+    """Lay [(header, [part, ...])] onto rows: parts of a group joined with ', ', groups with '; '.
+
+    A group too long for one row carries on to the next with its header repeated, so a long
+    HAFELE list splits between parts instead of overflowing. Returns rows, or None when a single
+    part is wider than a row even on its own.
+    """
+    rows = []
+    for head, parts in groups:
+        prefix = f"{head}: " if head else ""
+        open_group = False
+        for part in parts:
+            if open_group and _text_width(rows[-1] + ", " + part, size) <= width:
+                rows[-1] += ", " + part
+                continue
+            piece = prefix + part
+            if rows and not open_group and _text_width(rows[-1] + "; " + piece, size) <= width:
+                rows[-1] += "; " + piece
+            else:
+                if _text_width(piece, size) > width:
+                    return None
+                rows.append(piece)
+            open_group = True
+    return rows
+
+
+def pack_lines(entries, field_names, label, compact=None):
+    """Fit a list of entries onto a block of template rows without dropping any.
+
+    One entry per row when they fit. Otherwise the PMs' grouped shorthand (`compact`: one header
+    per manufacturer or material, as [(header, [part, ...])]) is tried first, then the full entries
+    joined with '; ', at PACK_FONT and then smaller down to FONT_FLOOR. If nothing holds them, the
+    last row says how many more there are and where to find them, and a warning goes out: the
+    sheet points at the drawing rather than silently losing a line.
+    """
+    entries = [e for e in entries if e]
+    n = len(field_names)
+    if len(entries) <= n:
+        return entries, []
+    width = _usable_width(field_names)
+    forms = ([compact] if compact else []) + [[("", [e]) for e in entries]]
+    size = PACK_FONT
+    while size >= FONT_FLOOR:
+        for form in forms:
+            rows = _wrap(form, width, size)
+            if rows is not None and len(rows) <= n:
+                return rows, []
+        size -= 0.5
+    # Nothing fits: fill n-1 rows at the smallest size, then point at the drawing.
+    parts = [(h, p) for h, ps in forms[0] for p in ps]
+    kept = 0
+    for k in range(len(parts), 0, -1):
+        groups = {}
+        for h, p in parts[:k]:
+            groups.setdefault(h, []).append(p)
+        rows = _wrap(list(groups.items()), width, FONT_FLOOR)
+        if rows is not None and len(rows) <= n - 1:
+            kept = k
+            break
+    more = len(parts) - kept
+    rows = rows if kept else []
+    rows.append(f"+ {more} MORE - SEE RECSET SCHEDULE")
+    return rows, [f"{label}: too many to fit {n} rows; {more} left on the RECSET, and the sheet says so. Check before issuing."]
+
+
+def _is_sheet_good(item):
+    return bool(re.search(r"(?i)sheet\s*good", item.get("description", "") + " " + item.get("item", "")))
+
+
+def _qty_text(qty):
+    q = re.sub(r"(?i)\s*pairs?\b", " PR", (qty or "").strip()).strip()
+    return f"({q})" if q else ""
+
+
+def _sheet_good_text(item):
+    """LUMBER | SHEET GOOD | PLUMA PLY 3/4" [4x8] | 5  ->  (5) PLUMA PLY 3/4" [4x8]"""
+    text = " ".join(p for p in (_qty_text(item.get("qty")), item.get("model", "").upper()) if p)
+    return text + " (CHECK RECSET)" if item.get("conflict") else text
+
+
+THICKNESS = re.compile(r'\d+(?:-\d+)?(?:/\d+)?"')
+SHEET_SIZE = re.compile(r"\[[^\]]+\]")
+
+
+def _groups(pairs):
+    """[(header, part)] -> [(header, [part, ...])], keeping first-seen order."""
+    out = {}
+    for head, part in pairs:
+        out.setdefault(head, []).append(part)
+    return list(out.items())
+
+
+def _sheet_goods_compact(items):
+    """(5) PLUMA PLY 3/4" [4x8], (4) PLUMA PLY 3/4" [4x10]  ->  PLUMA PLY: (5) 3/4" [4x8], (4) 3/4" [4x10]"""
+    pairs = []
+    for i in items:
+        if i.get("conflict"):  # two values printed over each other: keep it whole and flagged
+            pairs.append(("", _sheet_good_text(i)))
+            continue
+        model = i.get("model", "").upper()
+        spec = " ".join(THICKNESS.findall(model) + SHEET_SIZE.findall(model))
+        name = re.sub(r"\s+", " ", SHEET_SIZE.sub("", THICKNESS.sub("", model))).strip(" -")
+        pairs.append((name, " ".join(p for p in (_qty_text(i.get("qty")), spec) if p)))
+    return _groups(pairs)
+
+
+def _hardware_compact(items):
+    """Group by manufacturer, model + description only; a finish shared by the whole group goes once at the end."""
+    by = {}
+    for i in items:
+        by.setdefault(i.get("manufacturer", "").upper(), []).append(i)
+    out = []
+    for maker, rows in by.items():
+        finishes = {r.get("finish", "").upper() for r in rows} - {"", "N/A", "NA"}
+        parts = []
+        for r in rows:
+            # The description carries the size ("15\" TANDEM BLUMOTION"), so it's preferred; a long one
+            # ("FURNITURE TERMINAL FOR CONTROLLING EFL LOCK") gives way to the short item name.
+            desc, name = r.get("description", ""), r.get("item", "")
+            if not desc or (name and len(desc) > 28 and len(name) < len(desc)):
+                desc = name
+            parts.append(re.sub(r"\s+", " ", " ".join(p for p in (_qty_text(r.get("qty")), r.get("model", ""), desc) if p).upper()))
+        if len(finishes) == 1:
+            parts[-1] += f" - {finishes.pop()}"
+        out.append((maker, parts))
+    return out
+
+
+def _hardware_text(item):
+    """One schedule row the way PMs write it: (2 PR) ACCURIDE 3832-C16EC 16" EASY CLOSE SIDE MOUNT DRAWER SLIDE - NICKEL PLATED"""
+    desc = item.get("description", "")
+    name = item.get("item", "")
+    # Skip the item name when the description already says it (SHELF PINS / 5MM NICKEL SHELF PINS).
+    if name and not set(name.upper().split()) <= set(desc.upper().split()):
+        desc = f"{desc} {name}".strip()
+    parts = [_qty_text(item.get("qty")), item.get("manufacturer", ""), item.get("model", ""), desc]
+    text = " ".join(p for p in parts if p).upper()
+    finish = item.get("finish", "")
+    if finish and not re.fullmatch(r"(?i)n/?a", finish):
+        text += f" - {finish.upper()}"
+    note = item.get("notes", "")
+    if note:
+        text += f" ({note.upper()})"
+    return re.sub(r"\s+", " ", text)
+
+
 def intake_from_recset(path, drafter_names=None):
     """Pre-fill the intake from a RECSET shop drawing.
 
@@ -411,33 +615,43 @@ def intake_from_recset(path, drafter_names=None):
     # RECSET. Split it: sheet goods go on the Material line (with thickness,
     # uppercase); solid lumber implies blanks, which need cut sizes we can't read.
     hatch = [h.upper() for h in data["hatch_key"]]
-    sheets = [f"{DEFAULT_THICKNESS} {h}" for h in hatch if SHEET_GOODS.search(h)]
     lumber = [h for h in hatch if SOLID_LUMBER.search(h) and not SHEET_GOODS.search(h)]
-    materials_line = [", ".join(sheets)] if sheets else []
+    warnings = []
 
-    hardware = []
-    for row in data["hardware"]:
-        cells = [c.strip() for c in row.split("|") if c.strip()]
-        cells = [c for c in cells if not re.fullmatch(r"[YN\s/]*", c)]
-        qty = next((c for c in cells if re.fullmatch(r"\d{1,4}", c)), None)
-        rest = [c for c in cells if c != qty]
-        # Drop cells that are just a fragment of a longer cell (PINS vs ADJ. SHELF PINS).
-        rest = [
-            c
-            for c in rest
-            if not any(c != o and c.upper() in o.upper() for o in rest)
-        ]
-        line = ", ".join(dict.fromkeys(rest))
-        hardware.append(f"({qty}) {line}" if qty else line)
+    # Newer RECSETs list the sheet goods inside the hardware schedule (LUMBER | SHEET GOOD |
+    # <material> | <qty>): that's the ordering authority, with counts and sizes. Older ones only
+    # have the HATCH KEY, which names the materials but not how many sheets.
+    items = data.get("hardware_items", [])
+    for i in items:
+        if i.get("conflict"):
+            warnings.append(f"RECSET hardware schedule: {i['conflict']}. Check the drawing; the sheet shows both.")
+    sheet_rows = [i for i in items if _is_sheet_good(i)]
+    hardware_rows = [i for i in items if not _is_sheet_good(i)]
+
+    compact_materials = None
+    if sheet_rows:
+        materials = [_sheet_good_text(i) for i in sheet_rows]
+        compact_materials = _sheet_goods_compact(sheet_rows)
+    else:
+        materials = [f"{DEFAULT_THICKNESS} {h}" for h in hatch if SHEET_GOODS.search(h)]
+        if materials:
+            warnings.append("Materials come from the HATCH KEY (no sheet-goods rows in the schedule): no sheet counts, thickness assumed 3/4\".")
+    shop_materials, w = pack_lines(materials, F_SHOP_MATERIALS, "materials", compact_materials)
+    warnings += w
+    cnc_material, w = pack_lines(materials, F_CNC_MATERIAL, "CNC materials", compact_materials)
+    warnings += w
+    hardware, w = pack_lines([_hardware_text(i) for i in hardware_rows], F_SHOP_HARDWARE, "hardware",
+                             _hardware_compact(hardware_rows))
+    warnings += w
 
     finishes = data["finish_terms"]
     primary = FINISH_DEFAULT if "PRIMED" in finishes else (finishes[0] if finishes else "")
 
     return {
         "drawn_by": drawn_by,
-        "shop_materials": materials_line,
-        "shop_hardware": hardware[:4] or [NO_HARDWARE],
-        "cnc_material": materials_line,
+        "shop_materials": shop_materials,
+        "shop_hardware": hardware or [NO_HARDWARE],
+        "cnc_material": cnc_material,
         # Jeffrey's call (2026-08-17): always default to NONE rather than leaving
         # it empty. _needs_blank_sizes still flags when the drawing shows solid
         # lumber, so it can be surfaced for review before the file goes out.
@@ -447,6 +661,7 @@ def intake_from_recset(path, drafter_names=None):
         "finish_edges": primary,
         "finish_exterior": primary,
         "_needs_blank_sizes": lumber,
+        "_warnings": warnings,
         "_source": os.path.basename(path),
         "_raw": data,
     }
@@ -456,7 +671,7 @@ def build(wo_number, intake, template, out_dir):
     api = Innergy()
     wo = api.work_order(wo_number)
     catalog = api.labor_catalog()
-    warnings = []
+    warnings = list(intake.get("_recset_warnings") or [])
 
     # --- Hours: from the take-off at the signed-off rates; never Innergy planned hours ----------
     recommendation = estimating.recommend(wo.get("Name", ""), intake.get("_recset"), intake)
@@ -543,6 +758,9 @@ def build(wo_number, intake, template, out_dir):
     os.makedirs(out_dir, exist_ok=True)
 
     filled, overflow = fill_checklist(template, out_path, values, qr_payloads)
+    qr_check = verify_qr(out_path, qr_payloads)
+    if not qr_check["ok"]:
+        warnings.insert(0, "QR SCAN-BACK FAILED - do not issue this sheet: " + "; ".join(qr_check["problems"]))
 
     record_paths = []
     if est:
@@ -565,10 +783,37 @@ def build(wo_number, intake, template, out_dir):
         "estimate_record": record_paths,
         "warnings": warnings,
         "qr": qr_payloads,
+        "qr_verified": qr_check["ok"],
         "filled_fields": sorted(filled),
         # Values still too wide at the minimum readable font - shorten these.
         "overflowing_fields": [n for n, _ in overflow],
     }
+
+
+def verify_qr(pdf_path, qr_payloads, dpi=200):
+    """Scan every page's QR code back off the finished PDF and compare it with what was meant.
+
+    Hand-built sheets carried duplicated codes for years, so hours landed on the wrong labor line.
+    Each page must hold exactly one code, and it must decode to that page's payload. The check
+    reads the rendered page, so it catches a code placed on the wrong page or not placed at all.
+    """
+    from pyzbar import pyzbar  # optional dependency; without it the sheet can't be verified
+    from PIL import Image
+
+    problems = []
+    with pymupdf.open(pdf_path) as doc:
+        for pno in range(len(doc)):
+            want = qr_payloads.get(pno)
+            pix = doc[pno].get_pixmap(dpi=dpi)
+            img = Image.frombytes("RGB" if pix.n < 4 else "RGBA", (pix.width, pix.height), pix.samples)
+            got = [c.data.decode("utf-8") for c in pyzbar.decode(img) if c.type == "QRCODE"]
+            if want is None and not got:
+                continue
+            if len(got) != 1:
+                problems.append(f"page {pno + 1}: {len(got)} QR codes found, expected 1")
+            elif got[0] != want:
+                problems.append(f"page {pno + 1}: QR reads {got[0]!r}, expected {want!r}")
+    return {"ok": not problems, "problems": problems}
 
 
 def apply_model(takeoff, model_path):
@@ -610,7 +855,8 @@ def main():
     if args.recset:
         derived = intake_from_recset(args.recset, DRAFTER_NAMES)
         intake["_recset"] = derived.get("_raw")
-        for key in ("_raw", "_source", "_needs_blank_sizes"):
+        intake["_recset_warnings"] = derived.get("_warnings", [])
+        for key in ("_raw", "_source", "_needs_blank_sizes", "_warnings"):
             derived.pop(key, None)
         intake.update({k: v for k, v in derived.items() if v})
     # An explicit intake file always wins over anything read off the drawing.

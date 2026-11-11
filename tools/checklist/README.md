@@ -104,7 +104,10 @@ page 4   same form                                          004 - Finishing
 ```
 
 The backticks are part of the payload. Labor IDs come from `/api/labors` and are global, so
-they're stable. **Never hand over a sheet without scanning the codes back.**
+they're stable. **Never hand over a sheet without scanning the codes back.** The generator does
+this itself: after writing the PDF it renders every page, decodes the QR with `pyzbar`, and checks
+there's exactly one code per page and that it matches. The result shows `qr_verified`; a failure
+puts `QR SCAN-BACK FAILED - do not issue this sheet` at the top of the warnings.
 
 ## Reading a RECSET
 
@@ -113,6 +116,30 @@ CAD text extraction is unordered, so `recset.py` works off position, not reading
 Section parsers are scoped to the page their header is on. Newer RECSETs carry sheet goods inside
 the HARDWARE SCHEDULE as `LUMBER | NA | SHEET GOOD | <material> | NA | <qty>`, which is the
 ordering authority (about 20% over a tight nest). Use `nest.py` as a cross-check.
+
+**The hardware schedule** (`HARDWARE SCHEDULE`, `HARDWARE SCHEDULE / BOM`) is read column by column:
+each value goes to the header whose centre is nearest, rows are anchored on the ITEM column, and a
+wrapped description joins its row. The table ends at the next schedule in the same columns
+(APPLIANCE SCHEDULE etc.); legends at the far side of the sheet don't end it. Text a drawing
+carries twice at the same spot is kept once; two *different* values printed over each other are
+a drawing error, flagged in the warnings and marked `(CHECK RECSET)` on the sheet.
+
+- Sheet-good rows become **Materials** with counts and sizes. Without them the HATCH KEY is the
+  fallback (types only, 3/4" assumed, with a warning).
+- Everything else is **Hardware**, written the way PMs write it: `(2 PR) ACCURIDE 3832-C16EC 16" EASY CLOSE … - NICKEL PLATED`.
+- More lines than the template has rows are packed, never dropped: the PMs' grouped shorthand
+  first (`PLUMA PLY: (5) 3/4" [4x8], (4) 3/4" [4x10]`, `HAFELE: (1) 237.59.010 TERMINAL, …`),
+  wrapping a long group onto the next row, at 9 pt down to 6 pt. If even that won't fit, the last
+  row reads `+ N MORE - SEE RECSET SCHEDULE` and a warning says so.
+
+A RECSET with no hardware schedule gives NONE; on several jobs the PM's hardware came from
+elsewhere (shop stock, client supplied). A RECSET with no extractable text (outlined or scanned,
+e.g. 1884) gives nothing at all.
+
+**Checking the pre-fill against issued sheets:** `py check_recset.py "<SP Dropbox>/SP PROJECTS/ACTIVE JOBS" --out <file outside the repo>`
+pairs each issued checklist with its job's RECSET and compares field by field. The issued sheets are
+a reference, not ground truth (PMs write materials and finishes in their own words), so read the
+disagreements rather than trusting the score.
 
 ## Part count (CNC)
 
