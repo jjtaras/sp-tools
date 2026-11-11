@@ -22,3 +22,9 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Python (tools/checklist)
+__pycache__/
+*.pyc
+.venv/
+_tmp*/

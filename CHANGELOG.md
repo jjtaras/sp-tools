@@ -2,6 +2,10 @@
 
 Changes to the sp-tools engine and tooling. App changes go in `apps/<app>/CHANGELOG.md`, and assumption changes go in the SP config CHANGELOG.
 
+## Unreleased
+
+- `tools/checklist/`: the production checklist tool moved into the repo (Python). Settings come from `.env` and SP's `checklist/` config (people, defaults, template); the credential file is no longer used. Behavior unchanged: a regenerated checklist matched the original in 80 of 82 fields, all hours identical.
+
 ## 1.3.1 (2026-11-10)
 
 Fix release (Production Tracker page); no engine or assumption changes.

@@ -25,7 +25,8 @@ apps/profitability/      # Margin Board: src/Code.js, app.json (file list), apps
 apps/shop-schedule/      # Production Tracker: same shape
 apps/shared/             # the one look both boards share (design.css, head.html); inlined at build
 lib/                     # env/.env loading, app assembly, core bundling
-scripts/                 # build, record-fixture, freeze-fixture
+scripts/                 # build, deploy, rollback, record/freeze/accept fixtures, page-check
+tools/checklist/         # production checklist tool (Python): Innergy → QR codes → filled checklist PDF; RECSET/model take-offs
 tests/                   # core unit tests + fixture tests; fixtures load from the SP config location
 dist/                    # build output (gitignored)
 CHANGELOG.md             # engine changes

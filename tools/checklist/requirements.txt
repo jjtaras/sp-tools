@@ -1,0 +1,7 @@
+pymupdf
+qrcode
+pillow
+requests
+# optional: QR scan-back check, Rhino model tools
+pyzbar
+rhino3dm
