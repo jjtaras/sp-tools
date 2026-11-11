@@ -37,6 +37,7 @@ output folder; blank VIF / engineering sign-off take SP's defaults from `setting
 | `make_checklist.py` | The generator. Innergy → QR codes → filled PDF. |
 | `recset.py` | Reads a RECSET shop drawing: drafter, materials, hardware, finishes, sheet-goods schedule. |
 | `measure_elev.py` | Elevation area off a shop drawing, at the sheet's printed scale. |
+| `elevations.py` | Elevation sq ft per cabinet run from the Rhino model (real inches, no drawing scale). |
 | `measure.py` | Cabinet part area from a Rhino model, with duplicate-copy removal. |
 | `nest.py` | MaxRects nester. Sheet counts from a Rhino model. |
 | `sp_config.py` | Finds `.env` and SP's config folder; fails loudly if anything is missing. |
@@ -76,8 +77,10 @@ Hours are never taken from Innergy's planned hours: with no take-off and no esti
 left blank and the tool warns. `python estimate.py --takeoff t.json --name "<WO name>"` prices a
 take-off without making a checklist.
 
-Measuring an elevation: **read the scale off the sheet**, never assume; sets mix scales across
-pages. Use the printed overall dimension where there is one. Wall runs count one face;
+Measuring an elevation: **don't take it off the sheet's scale.** Every view on a sheet can have
+its own scale. `elevations.py` measures runs from the model instead (104: 150.8 sf vs 147.6 by hand);
+L/U runs and islands are flagged for a hand measurement for now. On a drawing, only printed
+dimensions are trustworthy. Use the printed overall dimension where there is one. Wall runs count one face;
 freestanding islands count all four. Classify each elevation by what's behind it.
 
 ## House conventions
